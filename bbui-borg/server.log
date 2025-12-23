@@ -1,6 +1,0 @@
-[INIT] 0 Backup-Cron-Jobs initialisiert
-[INIT] Compact-Job initialisiert (alle 6 Stunden)
-[SERVER] Borg Backup Management läuft auf Port 8040
-[SERVER] Öffne http://localhost:8040/login.html
-[SSH-KEY] Public Key hochgeladen und gespeichert
-[SSH-KEY] Hinweis: Nur Public Key vorhanden. Private Key nicht gespeichert.
