@@ -208,11 +208,13 @@ async function initializeDatabase() {
                 resource_id INTEGER,
                 details TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);
-            CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)
+            )
         `);
         console.log('[DB] Tabelle "audit_log" existiert oder wurde erstellt');
+        
+        // Erstelle Indizes für audit_log
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id)');
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)');
 
         // Erstelle backup_jobs Tabelle
         await pool.query(`
@@ -229,12 +231,14 @@ async function initializeDatabase() {
                 repository_size BIGINT,
                 archive_name VARCHAR(255),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_backup_jobs_source_id ON backup_jobs(source_id);
-            CREATE INDEX IF NOT EXISTS idx_backup_jobs_job_date ON backup_jobs(job_date);
-            CREATE INDEX IF NOT EXISTS idx_backup_jobs_status ON backup_jobs(status)
+            )
         `);
         console.log('[DB] Tabelle "backup_jobs" existiert oder wurde erstellt');
+        
+        // Erstelle Indizes für backup_jobs
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_backup_jobs_source_id ON backup_jobs(source_id)');
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_backup_jobs_job_date ON backup_jobs(job_date)');
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_backup_jobs_status ON backup_jobs(status)');
 
         // Erstelle recovery_files Tabelle
         await pool.query(`
@@ -246,11 +250,13 @@ async function initializeDatabase() {
                 file_size BIGINT,
                 modified_time TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_recovery_files_backup_job_id ON recovery_files(backup_job_id);
-            CREATE INDEX IF NOT EXISTS idx_recovery_files_file_path ON recovery_files(file_path)
+            )
         `);
         console.log('[DB] Tabelle "recovery_files" existiert oder wurde erstellt');
+        
+        // Erstelle Indizes für recovery_files
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_recovery_files_backup_job_id ON recovery_files(backup_job_id)');
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_recovery_files_file_path ON recovery_files(file_path)');
 
         // Erstelle Admin-Benutzer, falls nicht vorhanden
         const checkUser = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
