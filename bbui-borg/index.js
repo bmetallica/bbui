@@ -79,10 +79,75 @@ app.get('/', (req, res) => {
 // ===== AUTHENTIFIZIERUNG =====
 
 /**
- * Initialisiert Admin-Benutzer
+ * Initialisiert die Datenbankstruktur und Admin-Benutzer
  */
-async function initializeAdminUser() {
+async function initializeDatabase() {
     try {
+        // Erstelle users Tabelle, falls nicht vorhanden
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                is_admin BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[DB] Tabelle "users" existiert oder wurde erstellt');
+
+        // Erstelle servers Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS servers (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                host VARCHAR(255) NOT NULL,
+                port INTEGER DEFAULT 22,
+                username VARCHAR(100) NOT NULL,
+                ssh_key_path VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[DB] Tabelle "servers" existiert oder wurde erstellt');
+
+        // Erstelle sources Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS sources (
+                id SERIAL PRIMARY KEY,
+                server_id INTEGER REFERENCES servers(id) ON DELETE CASCADE,
+                remote_path VARCHAR(255) NOT NULL,
+                backup_schedule VARCHAR(50) DEFAULT 'daily',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[DB] Tabelle "sources" existiert oder wurde erstellt');
+
+        // Erstelle backups Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS backups (
+                id SERIAL PRIMARY KEY,
+                server_id INTEGER REFERENCES servers(id) ON DELETE CASCADE,
+                source_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
+                status VARCHAR(50),
+                start_time TIMESTAMP,
+                end_time TIMESTAMP,
+                size_bytes BIGINT,
+                files_count INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[DB] Tabelle "backups" existiert oder wurde erstellt');
+
+        // Erstelle backup_config Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS backup_config (
+                key VARCHAR(100) PRIMARY KEY,
+                value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[DB] Tabelle "backup_config" existiert oder wurde erstellt');
+
+        // Erstelle Admin-Benutzer, falls nicht vorhanden
         const checkUser = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
         if (checkUser.rows.length === 0) {
             const passwordHash = await bcrypt.hash('admin', saltRounds);
@@ -90,10 +155,13 @@ async function initializeAdminUser() {
                 'INSERT INTO users (username, password_hash, is_admin) VALUES ($1, $2, TRUE)',
                 ['admin', passwordHash]
             );
-            console.log('[AUTH] Admin-Benutzer erstellt');
+            console.log('[DB] ✅ Admin-Benutzer erstellt (username: admin, password: admin)');
+        } else {
+            console.log('[DB] Admin-Benutzer existiert bereits');
         }
     } catch (error) {
-        console.error('[AUTH] Fehler beim Initialisieren des Admin-Benutzers:', error);
+        console.error('[DB] Fehler beim Initialisieren der Datenbank:', error);
+        throw error;
     }
 }
 
@@ -1032,17 +1100,37 @@ async function initializeFolderStructure() {
  */
 async function startServer() {
     try {
+        console.log('');
+        console.log('╔════════════════════════════════════════════════════════════╗');
+        console.log('║    🗄️  BBUI - Borg Backup Management System               ║');
+        console.log('╚════════════════════════════════════════════════════════════╝');
+        console.log('');
+        
+        console.log('⏳ Initialisiere Datenbank...');
+        await initializeDatabase();
+        
+        console.log('⏳ Lade Konfiguration...');
         await loadConfiguration();
+        
+        console.log('⏳ Initialisiere Ordnerstruktur...');
         await initializeFolderStructure();
-        await initializeAdminUser();
+        
+        console.log('⏳ Initialisiere Cron-Jobs...');
         await initializeAllCronJobs();
 
         app.listen(port, () => {
-            console.log(`[SERVER] Borg Backup Management läuft auf Port ${port}`);
-            console.log(`[SERVER] Öffne http://localhost:${port}/login.html`);
+            console.log('');
+            console.log('✅ Server erfolgreich gestartet!');
+            console.log('');
+            console.log(`   📍 URL:      http://localhost:${port}`);
+            console.log('   👤 Benutzer: admin');
+            console.log('   🔑 Passwort: admin');
+            console.log('');
+            console.log('   ⚠️  Ändern Sie das Passwort nach dem Login!');
+            console.log('');
         });
     } catch (error) {
-        console.error('[SERVER] Fehler beim Starten:', error);
+        console.error('[SERVER] ❌ Fehler beim Starten:', error);
         process.exit(1);
     }
 }
