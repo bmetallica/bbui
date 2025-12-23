@@ -147,6 +147,63 @@ async function initializeDatabase() {
         `);
         console.log('[DB] Tabelle "backup_config" existiert oder wurde erstellt');
 
+        // Erstelle backup_schedules Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS backup_schedules (
+                id SERIAL PRIMARY KEY,
+                source_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
+                frequency VARCHAR(50) NOT NULL,
+                cron_expression VARCHAR(255),
+                enabled BOOLEAN DEFAULT TRUE,
+                last_run TIMESTAMP,
+                last_status VARCHAR(50),
+                last_error_message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[DB] Tabelle "backup_schedules" existiert oder wurde erstellt');
+
+        // Erstelle audit_log Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                action VARCHAR(100) NOT NULL,
+                table_name VARCHAR(100),
+                record_id INTEGER,
+                details TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[DB] Tabelle "audit_log" existiert oder wurde erstellt');
+
+        // Erstelle backup_jobs Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS backup_jobs (
+                id SERIAL PRIMARY KEY,
+                source_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
+                status VARCHAR(50),
+                start_time TIMESTAMP,
+                end_time TIMESTAMP,
+                error_message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[DB] Tabelle "backup_jobs" existiert oder wurde erstellt');
+
+        // Erstelle recovery_files Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS recovery_files (
+                id SERIAL PRIMARY KEY,
+                backup_id INTEGER REFERENCES backups(id) ON DELETE CASCADE,
+                file_path VARCHAR(500) NOT NULL,
+                file_size BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('[DB] Tabelle "recovery_files" existiert oder wurde erstellt');
+
         // Erstelle Admin-Benutzer, falls nicht vorhanden
         const checkUser = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
         if (checkUser.rows.length === 0) {
