@@ -100,12 +100,6 @@ EOF
 
 ### 2. Tabellen initialisieren
 
-```bash
-sudo -u postgres psql -d bbui <<EOF
-CREATE TABLE users (id SERIAL PRIMARY KEY, username VARCHAR UNIQUE, password_hash VARCHAR, is_admin BOOLEAN);
-CREATE TABLE backup_servers (id SERIAL PRIMARY KEY, name VARCHAR, hostname VARCHAR, ssh_port INT, ssh_user VARCHAR, status VARCHAR, created_at TIMESTAMP);
-EOF
-```
 
 Die Tabellen werden beim ersten Start automatisch erstellt.
 
