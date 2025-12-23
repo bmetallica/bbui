@@ -83,7 +83,7 @@ app.get('/', (req, res) => {
  */
 async function initializeDatabase() {
     try {
-        // Erstelle users Tabelle, falls nicht vorhanden
+        // Erstelle users Tabelle
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -95,7 +95,25 @@ async function initializeDatabase() {
         `);
         console.log('[DB] Tabelle "users" existiert oder wurde erstellt');
 
-        // Erstelle servers Tabelle
+        // Erstelle backup_servers Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS backup_servers (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL,
+                hostname VARCHAR(255) NOT NULL,
+                ssh_port INTEGER DEFAULT 22,
+                ssh_user VARCHAR(50) NOT NULL,
+                ssh_key_path VARCHAR(255) NOT NULL,
+                description TEXT,
+                enabled BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_check TIMESTAMP,
+                status VARCHAR(20) DEFAULT 'unknown'
+            )
+        `);
+        console.log('[DB] Tabelle "backup_servers" existiert oder wurde erstellt');
+
+        // Erstelle servers Tabelle (Legacy-Kompatibilität)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS servers (
                 id SERIAL PRIMARY KEY,
@@ -109,7 +127,22 @@ async function initializeDatabase() {
         `);
         console.log('[DB] Tabelle "servers" existiert oder wurde erstellt');
 
-        // Erstelle sources Tabelle
+        // Erstelle backup_sources Tabelle
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS backup_sources (
+                id SERIAL PRIMARY KEY,
+                server_id INTEGER NOT NULL REFERENCES backup_servers(id) ON DELETE CASCADE,
+                name VARCHAR(100) NOT NULL,
+                remote_path VARCHAR(255) NOT NULL,
+                description TEXT,
+                enabled BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(server_id, name)
+            )
+        `);
+        console.log('[DB] Tabelle "backup_sources" existiert oder wurde erstellt');
+
+        // Erstelle sources Tabelle (Legacy-Kompatibilität)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS sources (
                 id SERIAL PRIMARY KEY,
@@ -140,8 +173,10 @@ async function initializeDatabase() {
         // Erstelle backup_config Tabelle
         await pool.query(`
             CREATE TABLE IF NOT EXISTS backup_config (
-                key VARCHAR(100) PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
+                key VARCHAR(100) UNIQUE NOT NULL,
                 value TEXT,
+                description TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
@@ -151,15 +186,14 @@ async function initializeDatabase() {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS backup_schedules (
                 id SERIAL PRIMARY KEY,
-                source_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
-                frequency VARCHAR(50) NOT NULL,
-                cron_expression VARCHAR(255),
+                source_id INTEGER NOT NULL REFERENCES backup_sources(id) ON DELETE CASCADE,
+                frequency VARCHAR(20) NOT NULL,
+                cron_expression VARCHAR(100),
                 enabled BOOLEAN DEFAULT TRUE,
                 last_run TIMESTAMP,
-                last_status VARCHAR(50),
+                last_status VARCHAR(20) DEFAULT 'pending',
                 last_error_message TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
         console.log('[DB] Tabelle "backup_schedules" existiert oder wurde erstellt');
@@ -169,12 +203,14 @@ async function initializeDatabase() {
             CREATE TABLE IF NOT EXISTS audit_log (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-                action VARCHAR(100) NOT NULL,
-                table_name VARCHAR(100),
-                record_id INTEGER,
+                action VARCHAR(100),
+                resource_type VARCHAR(50),
+                resource_id INTEGER,
                 details TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)
         `);
         console.log('[DB] Tabelle "audit_log" existiert oder wurde erstellt');
 
@@ -182,13 +218,21 @@ async function initializeDatabase() {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS backup_jobs (
                 id SERIAL PRIMARY KEY,
-                source_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
-                status VARCHAR(50),
+                source_id INTEGER NOT NULL REFERENCES backup_sources(id) ON DELETE CASCADE,
+                schedule_id INTEGER REFERENCES backup_schedules(id) ON DELETE SET NULL,
+                job_date TIMESTAMP NOT NULL,
                 start_time TIMESTAMP,
                 end_time TIMESTAMP,
+                status VARCHAR(20) NOT NULL,
                 error_message TEXT,
+                bytes_backed_up BIGINT,
+                repository_size BIGINT,
+                archive_name VARCHAR(255),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
+            );
+            CREATE INDEX IF NOT EXISTS idx_backup_jobs_source_id ON backup_jobs(source_id);
+            CREATE INDEX IF NOT EXISTS idx_backup_jobs_job_date ON backup_jobs(job_date);
+            CREATE INDEX IF NOT EXISTS idx_backup_jobs_status ON backup_jobs(status)
         `);
         console.log('[DB] Tabelle "backup_jobs" existiert oder wurde erstellt');
 
@@ -196,11 +240,15 @@ async function initializeDatabase() {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS recovery_files (
                 id SERIAL PRIMARY KEY,
-                backup_id INTEGER REFERENCES backups(id) ON DELETE CASCADE,
-                file_path VARCHAR(500) NOT NULL,
+                backup_job_id INTEGER NOT NULL REFERENCES backup_jobs(id) ON DELETE CASCADE,
+                file_path VARCHAR(1024) NOT NULL,
+                file_type VARCHAR(20) NOT NULL,
                 file_size BIGINT,
+                modified_time TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
+            );
+            CREATE INDEX IF NOT EXISTS idx_recovery_files_backup_job_id ON recovery_files(backup_job_id);
+            CREATE INDEX IF NOT EXISTS idx_recovery_files_file_path ON recovery_files(file_path)
         `);
         console.log('[DB] Tabelle "recovery_files" existiert oder wurde erstellt');
 
