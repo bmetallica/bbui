@@ -418,6 +418,75 @@ app.get('/api/current-user', (req, res) => {
     }
 });
 
+/**
+ * POST /api/change-password - Passwort ändern
+ */
+app.post('/api/change-password', async (req, res) => {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    // Validiere Eingaben
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        return res.status(400).json({ error: 'Alle Felder sind erforderlich' });
+    }
+
+    if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: 'Neue Passwörter stimmen nicht überein' });
+    }
+
+    if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Passwort muss mindestens 6 Zeichen lang sein' });
+    }
+
+    // Benutzer muss authentifiziert sein
+    if (!req.session || !req.session.userId) {
+        return res.status(401).json({ error: 'Nicht authentifiziert' });
+    }
+
+    try {
+        // Hole aktuellen Benutzer
+        const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+        }
+
+        const user = result.rows[0];
+
+        // Validiere aktuelles Passwort
+        const passwordMatch = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!passwordMatch) {
+            return res.status(401).json({ error: 'Aktuelles Passwort ist falsch' });
+        }
+
+        // Prüfe, ob neues Passwort gleich dem alten ist
+        const sameAsOld = await bcrypt.compare(newPassword, user.password_hash);
+        if (sameAsOld) {
+            return res.status(400).json({ error: 'Neues Passwort darf nicht gleich dem alten sein' });
+        }
+
+        // Hash neues Passwort
+        const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+        // Aktualisiere Passwort in DB
+        await pool.query(
+            'UPDATE users SET password_hash = $1 WHERE id = $2',
+            [newPasswordHash, req.session.userId]
+        );
+
+        // Audit Log
+        await logAudit(req.session.userId, 'CHANGE_PASSWORD', 'users', req.session.userId, `Passwort geändert von Benutzer ${user.username}`);
+
+        res.json({ 
+            success: true, 
+            message: 'Passwort erfolgreich geändert. Bitte melden Sie sich erneut an.' 
+        });
+
+    } catch (error) {
+        console.error('[CHANGE-PASSWORD] Fehler:', error);
+        res.status(500).json({ error: 'Fehler beim Ändern des Passworts' });
+    }
+});
+
 // ===== SERVER SSH-KEY MANAGEMENT =====
 
 /**
