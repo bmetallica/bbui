@@ -1255,16 +1255,51 @@
         async function changePassword(event) {
             event.preventDefault();
             
+            const currentPassword = document.getElementById('oldPassword').value;
             const newPassword = document.getElementById('newPassword').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
             
+            // Validierungen
             if (newPassword !== confirmPassword) {
-                alert('Passwörter stimmen nicht überein');
+                showAlert('adminAlerts', 'Neue Passwörter stimmen nicht überein', 'error');
                 return;
             }
             
-            alert('Passwortänderung wird in einer zukünftigen Version implementiert');
-            closeModal('changePasswordModal');
+            if (newPassword.length < 6) {
+                showAlert('adminAlerts', 'Passwort muss mindestens 6 Zeichen lang sein', 'error');
+                return;
+            }
+            
+            try {
+                const result = await apiCall('POST', '/api/change-password', {
+                    currentPassword,
+                    newPassword,
+                    confirmPassword
+                });
+                
+                if (result && result.success) {
+                    showAlert('adminAlerts', result.message, 'success');
+                    
+                    // Felder leeren
+                    document.getElementById('oldPassword').value = '';
+                    document.getElementById('newPassword').value = '';
+                    document.getElementById('confirmPassword').value = '';
+                    
+                    // Modal nach 2 Sekunden schließen
+                    setTimeout(() => {
+                        closeModal('changePasswordModal');
+                        
+                        // Nach 3 Sekunden abmelden (damit neues Passwort beim Re-Login genutzt wird)
+                        setTimeout(() => {
+                            logout();
+                        }, 3000);
+                    }, 2000);
+                } else if (result && result.error) {
+                    showAlert('adminAlerts', 'Fehler: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('adminAlerts', 'Fehler beim Ändern des Passworts: ' + error.message, 'error');
+            }
         }
 
         async function logout() {
