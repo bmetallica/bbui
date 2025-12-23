@@ -54,24 +54,6 @@ Ein vollständiges, webbasiertes Backup-Verwaltungssystem für Borg Backup mit S
 - **Systemd-Integration**: Als Service installierbar und autostart-enabled
 - **Persistente Logs**: Systemd-Journal für Troubleshooting
 
----
-
-## 🐳 Docker-Installation
-
-### Voraussetzungen
-- Docker & Docker Compose installiert
-
-```bash
-mkdir bbui
-cd bbui
-wget https://raw.githubusercontent.com/bmetallica/bbui/main/docker-compose.yml
-wget https://raw.githubusercontent.com/bmetallica/bbui/main/.env
-
-# Passwörter und Port in der .env anpassen
-docker compose up -d
-```
-
-Das Interface ist dann erreichbar unter: `http://localhost:8040`
 
 ---
 
@@ -83,16 +65,6 @@ Das Interface ist dann erreichbar unter: `http://localhost:8040`
 - **Borg Backup** installiert (`apt install borgbackup`)
 - **SSHFS** für Remote-Backups (`apt install sshfs`)
 - **Root-Zugriff** für SSHFS-Mounting und Verzeichnis-Verwaltung
-
----
-
-## 📦 Schnellinstallation (als root)
-
-```bash
-wget https://raw.githubusercontent.com/bmetallica/bbui/main/install.sh
-chmod +x install.sh
-./install.sh
-```
 
 ---
 
@@ -110,15 +82,6 @@ cd bbui/bbui-borg
 
 ```bash
 npm install
-```
-
-### 3. SSH-Keys vorbereiten (optional)
-
-```bash
-# SSH-Schlüsselpaar für Remote-Server generieren
-ssh-keygen -t ed25519 -f /opt/bbui/bbui-borg/keys/default-key -N ""
-chmod 600 /opt/bbui/bbui-borg/keys/default-key
-chmod 644 /opt/bbui/bbui-borg/keys/default-key.pub
 ```
 
 ---
@@ -143,7 +106,7 @@ Die Tabellen werden beim ersten Start automatisch erstellt.
 
 ## 🔧 Konfiguration
 
-### 1. Datenbankverbindung (in index.js)
+### 1. Datenbankverbindung anpassen (in index.js)
 
 ```javascript
 const pool = new Pool({
@@ -155,18 +118,7 @@ const pool = new Pool({
 });
 ```
 
-### 2. Speicherorte anpassen (optional)
-
-```javascript
-// Standard-Werte in index.js
-const BACKUP_BASE_PATH = '/backups/borg-repos';      // Wird aus DB geladen
-const SSHFS_MOUNT_BASE = '/mnt/backup-sources';      // SSHFS Mount-Punkt
-const SSH_KEYS_DIR = './keys';                       // SSH-Key Speicherort
-```
-
-Diese können später im Admin-Panel geändert werden!
-
-### 3. Port anpassen (optional)
+### 2. Port anpassen (optional)
 
 ```javascript
 const port = 8040; // In index.js ändern
@@ -281,7 +233,6 @@ Standard-Zugangsdaten:
 
 ```bash
 sudo chmod 777 /mnt/backup-sources
-sudo chmod 777 /backups/borg-repos
 ```
 
 ### SSHFS-Mount schlägt fehl
@@ -295,18 +246,6 @@ ls -la /opt/bbui/bbui-borg/keys/default-key
 
 # SSH-Zugriff testbar?
 ssh -i /opt/bbui/bbui-borg/keys/default-key user@host ls -la /remote/path
-```
-
-### PostgreSQL-Verbindung fehlgeschlagen
-
-```bash
-# PostgreSQL läuft?
-systemctl status postgresql
-
-# Datenbank erreichbar?
-psql -U borg -d bbui -h localhost -c "SELECT 1"
-
-# Korrekte Credentials in index.js?
 ```
 
 ### Logs prüfen
@@ -343,10 +282,3 @@ MIT License
 
 Autor: [bmetallica](https://github.com/bmetallica)
 
-Feedback, Issues und Pull Requests sind willkommen!
-
----
-
-**Links**
-- [GitHub Repository](https://github.com/bmetallica/bbui)
-- [Issues & Feature Requests](https://github.com/bmetallica/bbui/issues)
