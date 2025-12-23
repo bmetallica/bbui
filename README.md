@@ -1,138 +1,352 @@
-# 🛠️ DPM – Debian Patch Management
+# 💾 BBUI – Borg Backup Management Interface
 
-Ein simples, zentrales Patchmanagement-System für Debian-Server im geschützten Homelab.
+Ein vollständiges, webbasiertes Backup-Verwaltungssystem für Borg Backup mit Server-Management, automatischen Zeitplänen, SSHFS-Mounting und benutzerfreundlichem Recovery-Interface.
 
-![DPM Screenshot](https://github.com/bmetallica/dpm/blob/main/utils/sc.png)
+![BBUI Dashboard](https://via.placeholder.com/800x400?text=BBUI+Dashboard)
+
+## �� Kernfunktionen
+
+### 📊 Dashboard & Übersicht
+- **Zentrale Verwaltungsplattform**: Gesamtübersicht aller Backup-Server und Quellen
+- **Live-Statistiken**: Anzahl Server, Quellen, erfolgreiche Backups in Echtzeit
+- **Speicherplatz-Monitoring**: Verfügbarer/Genutzter Speicherplatz mit Echtzeit-Visualisierung
+- **Backup-Historie**: Letzte 10 Sicherungen mit Status-Anzeige
+
+### 🖥️ Server-Management
+- **Flexible Server-Konfiguration**: Unbegrenzte Anzahl von SSH-Servern
+- **SSH-Key-Management**: 
+  - Default SSH-Key für alle Server
+  - Server-spezifische Custom SSH-Keys
+  - Public- und Private-Key-Upload
+- **Automatische Quellen-Verwaltung**: Konfiguriere Remote-Pfade für Backups
+- **SSHFS-Mounting**: Automatisches Mounting und Unmounting während Backups
+- **Backup-Repositories**: Automatische Erstellung und Verwaltung von Borg-Repositories
+
+### ⏰ Automatisierung
+- **Flexible Zeitplanung**: Stündlich, täglich, wöchentlich oder monatlich
+- **Cron-Job-Management**: Automatische Verwaltung von Backup-Prozessen
+- **Automatisches Cleanup**: Periodische Repository-Kompaktierung (Deduplication)
+- **Fehlertoleranz**: Automatisches Unmounting bei Fehlern
+
+### 💾 Backup-Funktionen
+- **Borg Backup Integration**: Vollständige Unterstützung für Borg Backup
+- **Kompression**: Automatische Compression (zstd, Level 10)
+- **Inkrementelle Backups**: Effiziente Speichernutzung durch Deduplication
+- **Archiv-Management**: Automatische Versionierung mit Zeitstempel
+- **Progress-Tracking**: Echtzeit-Fortschrittsanzeige während Backups
+
+### 🔍 Recovery & Wiederherstellung
+- **Backup-Browsing**: Durchsuche und findel Files in Backups
+- **Sichere Wiederherstellung**: Selektive Dateien oder komplette Archive
+- **Dateibaum-Anzeige**: Hierarchische Sicht auf Backup-Inhalte
+- **Zeitgesteuerte Recovery**: Wähle aus verschiedenen Backup-Versionen
+
+### 🔐 Sicherheit & Authentifizierung
+- **Benutzer-Management**: Sichere Login mit Passwort-Hashing (bcrypt)
+- **Session-Management**: Automatisches Timeout nach 24 Stunden
+- **Rollenbasierte Zugriffe (RBAC)**: Admin- und Standard-Benutzer
+- **Audit-Logging**: Vollständige Nachverfolgung aller Aktionen
+- **SSH-Key-Sicherheit**: Sichere Speicherung mit Dateiberechtigungen (0o600/0o700)
+
+### ⚙️ Administration
+- **Konfigurierbare Speicherorte**: Backup-Pfad kann im Admin-Panel geändert werden
+- **NFS/Netzwerk-Support**: Unterstützung für Remote-Speicher
+- **Systemd-Integration**: Als Service installierbar und autostart-enabled
+- **Persistente Logs**: Systemd-Journal für Troubleshooting
 
 ---
 
-## 🚀 Voraussetzungen
+## 🐳 Docker-Installation
 
-- Debian-Server mit **SSH**
-- Im Netzwerk erreichbare **PostgreSQL-Datenbank**
-- Installiertes **Node.js** inkl. `npm`
-- Auf allen Zielsystemen:
-  - Ein Benutzer mit APT-Rechten und SSH-Zugang
-  - Eintrag in der Datei `ssh.conf`
+### Voraussetzungen
+- Docker & Docker Compose installiert
+
+```bash
+mkdir bbui
+cd bbui
+wget https://raw.githubusercontent.com/bmetallica/bbui/main/docker-compose.yml
+wget https://raw.githubusercontent.com/bmetallica/bbui/main/.env
+
+# Passwörter und Port in der .env anpassen
+docker compose up -d
+```
+
+Das Interface ist dann erreichbar unter: `http://localhost:8040`
 
 ---
 
-## 📦 Installation
+## 🚀 Voraussetzungen (für manuelle Installation)
+
+- **Debian/Ubuntu-Server** mit SSH-Zugriff (optional)
+- **Node.js** 16+ mit npm
+- **PostgreSQL** 12+ Datenbank
+- **Borg Backup** installiert (`apt install borgbackup`)
+- **SSHFS** für Remote-Backups (`apt install sshfs`)
+- **Root-Zugriff** für SSHFS-Mounting und Verzeichnis-Verwaltung
+
+---
+
+## 📦 Schnellinstallation (als root)
+
+```bash
+wget https://raw.githubusercontent.com/bmetallica/bbui/main/install.sh
+chmod +x install.sh
+./install.sh
+```
+
+---
+
+## 📦 Manuelle Installation
 
 ### 1. Code herunterladen
 
 ```bash
 cd /opt/
-git clone https://github.com/bmetallica/dpm.git
+git clone https://github.com/bmetallica/bbui.git
+cd bbui/bbui-borg
 ```
 
-### 2. `sshpass` installieren
+### 2. Node.js Dependencies installieren
 
 ```bash
-apt install sshpass
+npm install
 ```
 
-### 3. SSH-Schlüssel erstellen (als root)
+### 3. SSH-Keys vorbereiten (optional)
 
 ```bash
-ssh-keygen
-```
-
-### 4. Projekt vorbereiten
-
-```bash
-cd /opt/dpm/patch-management
-npm init -y
-npm install express pg body-parser ws
+# SSH-Schlüsselpaar für Remote-Server generieren
+ssh-keygen -t ed25519 -f /opt/bbui/bbui-borg/keys/default-key -N ""
+chmod 600 /opt/bbui/bbui-borg/keys/default-key
+chmod 644 /opt/bbui/bbui-borg/keys/default-key.pub
 ```
 
 ---
 
 ## 🗄️ PostgreSQL vorbereiten
 
-1. Datenbank mit dem Namen `apt` anlegen.
-2. Mit `psql` folgende SQL-Befehle ausführen:
+### 1. Datenbank und Benutzer anlegen
 
-```sql
-CREATE SEQUENCE public.zustand_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-CREATE TABLE public.zustand (
-    id integer NOT NULL DEFAULT nextval('zustand_id_seq'::regclass),
-    server character varying(15) NOT NULL,
-    sys character varying(255) NOT NULL,
-    pu character varying(3) NOT NULL,
-    ul text,
-    root_free character varying(10) NOT NULL,
-    last_run timestamp NOT NULL,
-    zus character varying(255),
-    komment character varying(255),
-    CONSTRAINT zustand_pkey PRIMARY KEY (id),
-    CONSTRAINT zustand_server_key UNIQUE (server)
-);
+```bash
+sudo -u postgres psql <<EOF
+CREATE USER borg WITH PASSWORD 'borg';
+CREATE DATABASE bbui OWNER borg;
+GRANT ALL PRIVILEGES ON DATABASE bbui TO borg;
+EOF
 ```
+
+### 2. Tabellen initialisieren
+
+Die Tabellen werden beim ersten Start automatisch erstellt.
 
 ---
 
 ## 🔧 Konfiguration
 
-### 1. SSH-Zugang konfigurieren
+### 1. Datenbankverbindung (in index.js)
 
-Datei `ssh.conf` anpassen:
-
-```conf
-benutzername
-passwort
+```javascript
+const pool = new Pool({
+    user: 'borg',
+    host: 'localhost',
+    database: 'bbui',
+    password: 'borg',
+    port: 5432
+});
 ```
 
-### 2. Datenbank-Zugangsdaten in `index.js` eintragen.
+### 2. Speicherorte anpassen (optional)
 
-### 3. `patch.sh` auf den Zielsystemen einrichten
-
-- Datei `/opt/dpm/utils/patch.sh` nach `/local/` auf dem Zielserver kopieren
-- In `patch.sh` die Datenbank-Zugangsdaten anpassen
-- Cronjob zum regelmäßigen Ausführen einrichten:
-
-```bash
-crontab -e
+```javascript
+// Standard-Werte in index.js
+const BACKUP_BASE_PATH = '/backups/borg-repos';      // Wird aus DB geladen
+const SSHFS_MOUNT_BASE = '/mnt/backup-sources';      // SSHFS Mount-Punkt
+const SSH_KEYS_DIR = './keys';                       // SSH-Key Speicherort
 ```
 
-```cron
-0 * * * * /local/patch.sh
+Diese können später im Admin-Panel geändert werden!
+
+### 3. Port anpassen (optional)
+
+```javascript
+const port = 8040; // In index.js ändern
 ```
 
 ---
 
-## 🔄 Systemd-Dienst einrichten
+## 🚀 Anwendung starten
+
+### Option 1: Mit Systemd Service (empfohlen - Root erforderlich)
 
 ```bash
-mv /opt/dpm/utils/pm.service /etc/systemd/system/
-chmod 755 /etc/systemd/system/pm.service
-systemctl daemon-reload
-systemctl start pm
-systemctl enable pm
+# Service-Datei kopieren
+sudo cp /opt/bbui/bbui-borg/bbui.service /etc/systemd/system/
+
+# Systemd neu laden
+sudo systemctl daemon-reload
+
+# Service starten
+sudo systemctl start bbui
+
+# Beim Boot automatisch starten
+sudo systemctl enable bbui
+
+# Status prüfen
+sudo systemctl status bbui
+
+# Logs ansehen (Live)
+sudo journalctl -u bbui -f
+```
+
+### Option 2: Direkt mit Node.js starten
+
+```bash
+cd /opt/bbui/bbui-borg
+node index.js
+```
+
+### Option 3: Mit npm start
+
+```bash
+cd /opt/bbui/bbui-borg
+npm start
 ```
 
 ---
 
 ## 🌐 Zugriff
 
-Das Webinterface ist danach erreichbar unter:
+Das Webinterface ist nach Installation erreichbar unter:
 
 ```
-http://localhost:3000
+http://localhost:8040
 ```
 
-(Der Port kann in der Datei `index.js` angepasst werden.)
+(Port kann in `index.js` angepasst werden)
+
+---
+
+## 🔑 Login
+
+Standard-Zugangsdaten:
+
+| Feld | Wert |
+|------|------|
+| **Benutzername** | admin |
+| **Passwort** | admin |
+
+⚠️ **Wichtig**: Passwort nach dem ersten Login ändern!
+
+---
+
+## 🎯 Quick Start
+
+### 1. Server hinzufügen
+
+1. Im Webinterface anmelden (admin/admin)
+2. Zum Tab "Server" gehen
+3. "Neuen Server hinzufügen" klicken
+4. SSH-Credentials eingeben
+5. SSH-Key-Option wählen (Default oder Custom)
+6. Speichern
+
+### 2. Backup-Quelle erstellen
+
+1. Auf einen Server klicken
+2. "+ Quelle" Button drücken
+3. Name und Remote-Pfad eingeben
+4. Optional: Zeitplan festlegen
+5. Speichern
+
+### 3. Backup starten
+
+1. Im Tab "Backups" die Quelle auswählen
+2. "Backup jetzt starten" klicken
+3. Fortschritt beobachten (Live-Updates)
+4. Nach erfolgreicher Vollendung wird Archive in Borg-Repository gespeichert
+
+### 4. Daten wiederherstellen
+
+1. Im Tab "Recovery" die Quelle auswählen
+2. Gewünschtes Backup-Archiv auswählen
+3. Dateibaum durchsuchen
+4. Gewünschte Dateien auswählen
+5. "Wiederherstellen" klicken
+
+---
+
+## 🐛 Troubleshooting
+
+### "Keine Berechtigung für /mnt/backup-sources"
+
+```bash
+sudo chmod 777 /mnt/backup-sources
+sudo chmod 777 /backups/borg-repos
+```
+
+### SSHFS-Mount schlägt fehl
+
+```bash
+# SSHFS installiert?
+apt install sshfs
+
+# SSH-Key vorhanden?
+ls -la /opt/bbui/bbui-borg/keys/default-key
+
+# SSH-Zugriff testbar?
+ssh -i /opt/bbui/bbui-borg/keys/default-key user@host ls -la /remote/path
+```
+
+### PostgreSQL-Verbindung fehlgeschlagen
+
+```bash
+# PostgreSQL läuft?
+systemctl status postgresql
+
+# Datenbank erreichbar?
+psql -U borg -d bbui -h localhost -c "SELECT 1"
+
+# Korrekte Credentials in index.js?
+```
+
+### Logs prüfen
+
+```bash
+# Systemd-Journal live
+sudo journalctl -u bbui -f
+
+# Letzte 50 Zeilen
+sudo journalctl -u bbui -n 50
+
+# Nur Fehler
+sudo journalctl -u bbui -p err
+```
+
+---
+
+## 📚 Dokumentation
+
+Weitere Informationen:
+- [BORG_BACKUP_README.md](./BORG_BACKUP_README.md) - Technische Architektur
+- [Borg Backup Dokumentation](https://borgbackup.readthedocs.io/)
+- [PostgreSQL Dokumentation](https://www.postgresql.org/docs/)
+
+---
+
+## 📝 Lizenz
+
+MIT License
 
 ---
 
 ## 🎉 Viel Spaß mit diesem Projekt!
 
+Autor: [bmetallica](https://github.com/bmetallica)
+
+Feedback, Issues und Pull Requests sind willkommen!
+
 ---
 
-**Autor:** [bmetallica](https://github.com/bmetallica)
+**Links**
+- [GitHub Repository](https://github.com/bmetallica/bbui)
+- [Issues & Feature Requests](https://github.com/bmetallica/bbui/issues)

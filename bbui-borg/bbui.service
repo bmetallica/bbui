@@ -1,0 +1,22 @@
+[Unit]
+Description=BBUI - Borg Backup Management System
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/bbui/bbui-borg
+ExecStart=/usr/bin/node /opt/bbui/bbui-borg/index.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bbui
+
+# Security Settings
+PrivateTmp=no
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target

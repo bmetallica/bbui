@@ -1,0 +1,27 @@
+{
+  "name": "borg-backup-management",
+  "version": "1.0.0",
+  "description": "Borg Backup Management System",
+  "main": "index-borg.js",
+  "scripts": {
+    "start": "node index-borg.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["borg", "backup", "management"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "body-parser": "^2.2.1",
+    "express": "^5.2.1",
+    "express-session": "^1.18.2",
+    "node-cron": "^4.2.1",
+    "node-pty": "^1.0.0",
+    "pg": "^8.16.3",
+    "ssh2": "^1.17.0",
+    "ws": "^8.18.3",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
+  }
+}

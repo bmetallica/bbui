@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Borg Backup Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 95vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .user-info {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .user-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid #e0e0e0;
+            padding: 0 30px;
+            background: #f9f9f9;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 16px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .tab-btn:hover {
+            color: #667eea;
+        }
+
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .danger-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .secondary-btn {
+            background: #666;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .table th {
+            background: #f0f0f0;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .table tr:hover {
+            background: #f9f9f9;
+        }
+
+        .status-success {
+            color: #27ae60;
+            font-weight: 600;
+        }
+
+        .status-failed {
+            color: #e74c3c;
+            font-weight: 600;
+        }
+
+        .status-running {
+            color: #f39c12;
+            font-weight: 600;
+        }
+
+        .status-pending {
+            color: #95a5a6;
+            font-weight: 600;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: flex-end;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .action-buttons button {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .header-right {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .tabs {
+                overflow-x: auto;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 Borg Backup Management</h1>
+            <div class="header-right">
+                <div class="user-info">
+                    <span id="username" class="user-badge">Benutzer laden...</span>
+                </div>
+                <button class="logout-btn" onclick="logout()">Abmelden</button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+            <button class="tab-btn" onclick="switchTab('servers')">🖥️ Server</button>
+            <button class="tab-btn" onclick="switchTab('backups')">🔄 Sicherungen</button>
+            <button class="tab-btn" onclick="switchTab('recovery')">📥 Recovery</button>
+            <button class="tab-btn" onclick="switchTab('admin')">⚙️ Admin</button>
+        </div>
+
+        <div class="content">
+            <!-- DASHBOARD TAB -->
+            <div class="tab-content active" id="tab-dashboard">
+                <h2>Dashboard</h2>
+                <div id="dashboardAlerts"></div>
+                
+                <div class="grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Verbundene Server</div>
+                        <div class="stat-value" id="statServers">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Backup-Quellen</div>
+                        <div class="stat-value" id="statSources">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Erfolgreiche Backups</div>
+                        <div class="stat-value" id="statSuccess">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Speicherplatz</div>
+                        <div id="statStorage" style="font-size: 24px; font-weight: bold; color: #2196F3; margin: 10px 0;">-</div>
+                        <div id="storageMeter" style="margin-top: 10px;">
+                            <div style="height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden;">
+                                <div id="storageBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #4CAF50, #ff9800, #f44336); transition: width 0.3s;"></div>
+                            </div>
+                            <div id="storagePercent" style="font-size: 12px; color: #666; margin-top: 5px;">Wird geladen...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Letzte Sicherungen</h2>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Server</th>
+                                <th>Quelle</th>
+                                <th>Datum</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentBackupsList">
+                            <tr><td colspan="4" style="text-align: center; color: #999;">Lädt...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SERVERS TAB -->
+            <div class="tab-content" id="tab-servers">
+                <h2>Backup-Server</h2>
+                <div id="serversAlerts"></div>
+                
+                <div class="button-group">
+                    <button onclick="openAddServerModal()">✚ Neuen Server hinzufügen</button>
+                </div>
+
+                <div id="serversList" style="margin-top: 20px;"></div>
+            </div>
+
+            <!-- BACKUPS TAB -->
+            <div class="tab-content" id="tab-backups">
+                <h2>Sicherungen verwalten</h2>
+                <div id="backupsAlerts"></div>
+                
+                <div class="card">
+                    <h2>Quelle auswählen</h2>
+                    <div class="form-group">
+                        <label for="sourceSelect">Backup-Quelle:</label>
+                        <select id="sourceSelect" onchange="loadSourceDetails()">
+                            <option value="">-- Quelle auswählen --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="sourceDetails"></div>
+            </div>
+
+            <!-- RECOVERY TAB -->
+            <div class="tab-content" id="tab-recovery">
+                <h2>Wiederherstellung</h2>
+                <div id="recoveryAlerts"></div>
+                
+                <div class="card">
+                    <h2>Backup auswählen</h2>
+                    <div class="form-group">
+                        <label for="recoverySourceSelect">Quelle:</label>
+                        <select id="recoverySourceSelect" onchange="loadRecoveryJobs()">
+                            <option value="">-- Quelle auswählen --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="recoveryJobsList"></div>
+            </div>
+
+            <!-- ADMIN TAB -->
+            <div class="tab-content" id="tab-admin">
+                <h2>Verwaltung</h2>
+                <div id="adminAlerts"></div>
+                
+                <div class="card">
+                    <h2>Benutzer</h2>
+                    <div class="button-group">
+                        <button onclick="openChangePasswordModal()">🔐 Passwort ändern</button>
+                    </div>
+                </div>
+
+                <!-- SSH-Key Management Section -->
+                <div class="card">
+                    <h2>🔑 SSH-Key Management</h2>
+                    <p style="color: #666; margin-bottom: 1rem;">Verwalte den Default SSH-Key für Server-Authentifizierung.</p>
+                    <div id="sshKeyStatus" style="margin: 1rem 0; padding: 1rem; background: #f5f5f5; border-radius: 5px; border-left: 4px solid #2196F3;">
+                        <p><strong>Status:</strong> <span id="sshKeyStatusText">Wird geladen...</span></p>
+                    </div>
+                    <div class="button-group" style="margin-bottom: 1rem;">
+                        <input type="file" id="sshKeyFileInput" style="margin-right: 10px; padding: 8px;">
+                        <button onclick="uploadSSHKey()" style="background-color: #4CAF50;">📤 SSH-Key hochladen</button>
+                        <button onclick="downloadSSHKey()" style="background-color: #2196F3;">⬇️ SSH-Key herunterladen</button>
+                        <button onclick="deleteSSHKey()" style="background-color: #f44336;">🗑️ SSH-Key löschen</button>
+                    </div>
+                    <div id="sshKeyMessage" style="margin-top: 1rem; padding: 1rem; display: none; border-radius: 5px; border-left: 4px solid #ff9800;"></div>
+                </div>
+
+                <div class="card">
+                    <h2>Wartung & Optimierung</h2>
+                    <p style="color: #666; margin-bottom: 1rem;">Optimiere Borg-Repositories durch Deduplizierung. Alle Backups werden behalten, nur Speicherplatz wird freigegeben.</p>
+                    <div class="button-group">
+                        <button onclick="triggerCompact()" id="compactBtn" style="background-color: #ff9800;">🗜️ Repositories optimieren</button>
+                    </div>
+                    <div id="compactStatus" style="margin-top: 1rem;"></div>
+                </div>
+
+                <div class="card">
+                    <h2>💾 Speicherort-Konfiguration</h2>
+                    <p style="color: #666; margin-bottom: 1rem;">Geben Sie den absoluten Pfad an, wo Backups gespeichert werden.</p>
+                    <div class="form-group">
+                        <label for="backupBasePath">Backup-Speicherort:</label>
+                        <input type="text" id="backupBasePath" placeholder="/backups/borg-repos" style="width: 100%; padding: 10px;">
+                        <small style="display: block; margin-top: 5px; color: #999;">Beispiel: /backups/borg-repos oder /mnt/nfs/backups</small>
+                    </div>
+                    <div class="button-group" style="margin-top: 1rem;">
+                        <button onclick="saveBackupBasePath()" style="background-color: #4CAF50;">💾 Speichern</button>
+                        <button onclick="loadBackupBasePath()" style="background-color: #2196F3;">🔄 Aktualisieren</button>
+                    </div>
+                    <div id="backupPathMessage" style="margin-top: 1rem;"></div>
+                </div>
+
+                <div class="card">
+                    <h2>Systeminfo</h2>
+                    <div id="systemInfo"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    <div class="modal" id="addServerModal">
+        <div class="modal-content">
+            <div class="modal-header">Neuen Server hinzufügen</div>
+            <form onsubmit="saveServer(event)">
+                <div class="form-group">
+                    <label for="serverName">Name:</label>
+                    <input type="text" id="serverName" required>
+                </div>
+                <div class="form-group">
+                    <label for="serverHostname">Hostname/IP:</label>
+                    <input type="text" id="serverHostname" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="serverPort">SSH Port:</label>
+                        <input type="number" id="serverPort" value="22">
+                    </div>
+                    <div class="form-group">
+                        <label for="serverUser">SSH Benutzer:</label>
+                        <input type="text" id="serverUser" required>
+                    </div>
+                </div>
+
+                <!-- SSH-Key Auswahl Sektion -->
+                <div class="form-group" style="border: 1px solid #ddd; padding: 15px; border-radius: 5px; background: #f9f9f9;">
+                    <h4 style="margin-top: 0;">🔑 SSH-Key Authentifizierung</h4>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <input type="radio" name="sshKeyOption" value="default" checked onchange="updateSSHKeyOptions()">
+                            <span style="margin-left: 8px;"><strong>Default SSH-Key verwenden</strong></span>
+                        </label>
+                        <p style="margin-left: 28px; font-size: 12px; color: #666;">Nutzt den im Admin-Bereich hochgeladenen Default SSH-Key</p>
+                    </div>
+
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center;">
+                            <input type="radio" name="sshKeyOption" value="custom" onchange="updateSSHKeyOptions()">
+                            <span style="margin-left: 8px;"><strong>Server-spezifischen SSH-Key hochladen</strong></span>
+                        </label>
+                        <p style="margin-left: 28px; font-size: 12px; color: #666;">Lädt einen separaten SSH-Key für diesen Server hoch</p>
+                    </div>
+
+                    <!-- Custom Key Upload Sektion (initial versteckt) -->
+                    <div id="customKeySection" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                        <label for="serverCustomKey" style="display: block; margin-bottom: 8px;">SSH-Key Datei:</label>
+                        <input type="file" id="serverCustomKey" style="width: 100%; padding: 8px;">
+                        <p style="font-size: 11px; color: #999; margin-top: 5px;">Wählen Sie Ihre private SSH-Key Datei (z.B. id_rsa) oder public Key (id_rsa.pub)</p>
+                    </div>
+
+                    <div id="keyStatusMessage" style="margin-top: 10px; padding: 10px; display: none; border-radius: 3px; font-size: 12px;"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="serverDesc">Beschreibung:</label>
+                    <textarea id="serverDesc" rows="3"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="secondary-btn" onclick="closeModal('addServerModal')">Abbrechen</button>
+                    <button type="submit">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="addSourceModal">
+        <div class="modal-content">
+            <div class="modal-header">Neue Backup-Quelle</div>
+            <form onsubmit="saveSource(event)">
+                <input type="hidden" id="sourceServerId">
+                <div class="form-group">
+                    <label for="sourceName">Name:</label>
+                    <input type="text" id="sourceName" required>
+                </div>
+                <div class="form-group">
+                    <label for="sourceRemotePath">Remote Pfad:</label>
+                    <input type="text" id="sourceRemotePath" placeholder="/home/user/data" required>
+                </div>
+                <div class="form-group">
+                    <label for="sourceDesc">Beschreibung:</label>
+                    <textarea id="sourceDesc" rows="3"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="secondary-btn" onclick="closeModal('addSourceModal')">Abbrechen</button>
+                    <button type="submit">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="addScheduleModal">
+        <div class="modal-content">
+            <div class="modal-header">Backup-Zeitplan</div>
+            <form onsubmit="saveSchedule(event)">
+                <input type="hidden" id="scheduleSourceId">
+                <div class="form-group">
+                    <label for="scheduleFrequency">Häufigkeit:</label>
+                    <select id="scheduleFrequency" required>
+                        <option value="">-- Wählen Sie --</option>
+                        <option value="hourly">Stündlich</option>
+                        <option value="daily">Täglich</option>
+                        <option value="weekly">Wöchentlich</option>
+                        <option value="monthly">Monatlich</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="secondary-btn" onclick="closeModal('addScheduleModal')">Abbrechen</button>
+                    <button type="submit">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="changePasswordModal">
+        <div class="modal-content">
+            <div class="modal-header">Passwort ändern</div>
+            <form onsubmit="changePassword(event)">
+                <div class="form-group">
+                    <label for="oldPassword">Altes Passwort:</label>
+                    <input type="password" id="oldPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">Neues Passwort:</label>
+                    <input type="password" id="newPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">Bestätigung:</label>
+                    <input type="password" id="confirmPassword" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="secondary-btn" onclick="closeModal('changePasswordModal')">Abbrechen</button>
+                    <button type="submit">Ändern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ===== GLOBALE VARIABLEN =====
+        let currentUser = null;
+        let servers = [];
+        let sources = [];
+
+        // ===== API FUNKTIONEN =====
+        async function apiCall(method, endpoint, data = null) {
+            try {
+                const options = {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                if (data) options.body = JSON.stringify(data);
+                
+                const response = await fetch(endpoint, options);
+                const result = await response.json();
+                
+                if (!response.ok && response.status === 401) {
+                    window.location.href = '/login.html';
+                    return null;
+                }
+                
+                return result;
+            } catch (error) {
+                console.error('API Fehler:', error);
+                return null;
+            }
+        }
+
+        // ===== INITIALISIERUNG =====
+        async function init() {
+            const user = await apiCall('GET', '/api/current-user');
+            if (!user) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            currentUser = user;
+            document.getElementById('username').textContent = `👤 ${user.username}${user.isAdmin ? ' (Admin)' : ''}`;
+            
+            await loadDashboard();
+            await loadServers();
+            await loadSources();
+        }
+
+        async function loadDashboard() {
+            const stats = await apiCall('GET', '/api/dashboard/stats');
+            if (!stats) return;
+            
+            // Aktualisiere Statistik-Kacheln
+            document.getElementById('statServers').textContent = stats.totalServers || 0;
+            document.getElementById('statSources').textContent = stats.totalSources || 0;
+            document.getElementById('statSuccess').textContent = stats.successfulBackups || 0;
+            
+            // Aktualisiere Speicherplatz-Kachel
+            if (stats.storage) {
+                const { used, total, available, percentage } = stats.storage;
+                const usedGB = (used / 1024 / 1024 / 1024).toFixed(1);
+                const totalGB = (total / 1024 / 1024 / 1024).toFixed(1);
+                const availableGB = (available / 1024 / 1024 / 1024).toFixed(1);
+                
+                document.getElementById('statStorage').innerHTML = `${usedGB}GB / ${totalGB}GB`;
+                document.getElementById('storageBar').style.width = percentage + '%';
+                
+                let barColor = '#4CAF50'; // Grün
+                if (percentage > 80) barColor = '#f44336'; // Rot
+                else if (percentage > 60) barColor = '#ff9800'; // Orange
+                
+                document.getElementById('storageBar').style.background = barColor;
+                document.getElementById('storagePercent').innerHTML = `${percentage}% genutzt (${availableGB}GB verfügbar)`;
+            }
+            
+            // Aktualisiere letzte Backups
+            if (stats.latestBackups && stats.latestBackups.length > 0) {
+                let html = '';
+                for (const backup of stats.latestBackups) {
+                    html += `
+                        <tr>
+                            <td>${backup.name}</td>
+                            <td>${backup.source_name}</td>
+                            <td>${new Date(backup.job_date).toLocaleString('de-DE')}</td>
+                            <td><span class="status-${backup.status}">${backup.status}</span></td>
+                        </tr>
+                    `;
+                }
+                document.getElementById('recentBackupsList').innerHTML = html;
+            }
+        }
+
+        async function loadServers() {
+            servers = await apiCall('GET', '/api/servers');
+            if (!servers) servers = [];
+            
+            let html = '';
+            for (const server of servers) {
+                html += `
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div>
+                                <h3>${server.name}</h3>
+                                <p><strong>Host:</strong> ${server.hostname}:${server.ssh_port}</p>
+                                <p><strong>Benutzer:</strong> ${server.ssh_user}</p>
+                                <p><strong>Status:</strong> <span class="status-${server.status || 'unknown'}">${server.status || 'unbekannt'}</span></p>
+                            </div>
+                            <div class="action-buttons">
+                                <button onclick="openAddSourceModal(${server.id})">+ Quelle</button>
+                                <button class="danger-btn" onclick="deleteServer(${server.id})">Löschen</button>
+                            </div>
+                        </div>
+                        <div id="sources-${server.id}" style="margin-top: 10px;"></div>
+                    </div>
+                `;
+            }
+            document.getElementById('serversList').innerHTML = html || '<p>Keine Server konfiguriert.</p>';
+        }
+
+        async function loadSources() {
+            const sourceSelect = document.getElementById('sourceSelect');
+            const recoverySelect = document.getElementById('recoverySourceSelect');
+            sourceSelect.innerHTML = '<option value="">-- Quelle auswählen --</option>';
+            recoverySelect.innerHTML = '<option value="">-- Quelle auswählen --</option>';
+            
+            for (const server of servers) {
+                const data = await apiCall('GET', `/api/sources/${server.id}`);
+                if (data) {
+                    sources = [...sources, ...data];
+                    for (const source of data) {
+                        const option = document.createElement('option');
+                        option.value = source.id;
+                        option.textContent = `${server.name} / ${source.name}`;
+                        sourceSelect.appendChild(option);
+                        recoverySelect.appendChild(option.cloneNode(true));
+                    }
+                }
+            }
+        }
+
+        async function loadSourceDetails() {
+            const sourceId = document.getElementById('sourceSelect').value;
+            const detailsDiv = document.getElementById('sourceDetails');
+            
+            if (!sourceId) {
+                detailsDiv.innerHTML = '';
+                return;
+            }
+            
+            const jobs = await apiCall('GET', `/api/jobs/${sourceId}`);
+            const schedules = await apiCall('GET', `/api/schedules/${sourceId}`);
+            
+            let html = `
+                <div class="card">
+                    <h2>Aktive Zeitpläne</h2>
+                    <div class="button-group">
+                        <button onclick="openAddScheduleModal(${sourceId})">+ Zeitplan hinzufügen</button>
+                        <button onclick="startManualBackup(${sourceId})">▶️ Jetzt sichern</button>
+                    </div>
+                    <table class="table">
+                        <thead>
+                            <tr><th>Häufigkeit</th><th>Status</th><th>Letzte Ausführung</th></tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            if (schedules && schedules.length > 0) {
+                for (const schedule of schedules) {
+                    html += `
+                        <tr>
+                            <td>${schedule.frequency}</td>
+                            <td><span class="status-${schedule.last_status || 'pending'}">${schedule.last_status || 'ausstehend'}</span></td>
+                            <td>${schedule.last_run ? new Date(schedule.last_run).toLocaleString('de-DE') : 'Nie'}</td>
+                        </tr>
+                    `;
+                }
+            } else {
+                html += '<tr><td colspan="3" style="text-align: center; color: #999;">Keine Zeitpläne</td></tr>';
+            }
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card">
+                    <h2>Backup-Historie</h2>
+                    <table class="table">
+                        <thead>
+                            <tr><th>Datum</th><th>Status</th><th>Archiv</th></tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            if (jobs && jobs.length > 0) {
+                for (const job of jobs.slice(0, 20)) {
+                    html += `
+                        <tr>
+                            <td>${new Date(job.job_date).toLocaleString('de-DE')}</td>
+                            <td><span class="status-${job.status}">${job.status}</span></td>
+                            <td>${job.archive_name || '-'}</td>
+                        </tr>
+                    `;
+                }
+            } else {
+                html += '<tr><td colspan="3" style="text-align: center; color: #999;">Keine Backups</td></tr>';
+            }
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            detailsDiv.innerHTML = html;
+        }
+
+        // ===== MODAL FUNKTIONEN =====
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function openAddServerModal() {
+            document.getElementById('serverName').value = '';
+            document.getElementById('serverHostname').value = '';
+            document.getElementById('serverPort').value = '22';
+            document.getElementById('serverUser').value = '';
+            document.getElementById('serverCustomKey').value = '';
+            document.getElementById('serverDesc').value = '';
+            document.querySelector('input[name="sshKeyOption"][value="default"]').checked = true;
+            document.getElementById('customKeySection').style.display = 'none';
+            document.getElementById('keyStatusMessage').style.display = 'none';
+            openModal('addServerModal');
+        }
+
+        // Zeige/verstecke Custom Key Upload Sektion je nach Auswahl
+        function updateSSHKeyOptions() {
+            const selectedOption = document.querySelector('input[name="sshKeyOption"]:checked').value;
+            const customKeySection = document.getElementById('customKeySection');
+            
+            if (selectedOption === 'custom') {
+                customKeySection.style.display = 'block';
+            } else {
+                customKeySection.style.display = 'none';
+            }
+        }
+
+        function openAddSourceModal(serverId) {
+            document.getElementById('sourceServerId').value = serverId;
+            document.getElementById('sourceName').value = '';
+            document.getElementById('sourceRemotePath').value = '';
+            document.getElementById('sourceDesc').value = '';
+            openModal('addSourceModal');
+        }
+
+        function openAddScheduleModal(sourceId) {
+            document.getElementById('scheduleSourceId').value = sourceId;
+            document.getElementById('scheduleFrequency').value = '';
+            openModal('addScheduleModal');
+        }
+
+        function openChangePasswordModal() {
+            document.getElementById('oldPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+            openModal('changePasswordModal');
+        }
+
+        // ===== SPEICHER FUNKTIONEN =====
+        async function saveServer(event) {
+            event.preventDefault();
+            
+            const selectedKeyOption = document.querySelector('input[name="sshKeyOption"]:checked').value;
+            let ssh_key_path = null;
+            
+            // Wenn Custom Key ausgewählt, hochladen
+            if (selectedKeyOption === 'custom') {
+                const keyFile = document.getElementById('serverCustomKey').files[0];
+                if (!keyFile) {
+                    showAlert('serversAlerts', 'Bitte wählen Sie einen SSH-Key aus', 'error');
+                    return;
+                }
+                
+                // Lade Custom SSH-Key hoch
+                ssh_key_path = await uploadServerSSHKey(keyFile);
+                if (!ssh_key_path) {
+                    showAlert('serversAlerts', 'Fehler beim Hochladen des SSH-Keys', 'error');
+                    return;
+                }
+            } else {
+                // Default SSH-Key verwenden
+                ssh_key_path = 'DEFAULT';
+            }
+            
+            const serverData = {
+                name: document.getElementById('serverName').value,
+                hostname: document.getElementById('serverHostname').value,
+                ssh_port: parseInt(document.getElementById('serverPort').value),
+                ssh_user: document.getElementById('serverUser').value,
+                ssh_key_path: ssh_key_path,
+                description: document.getElementById('serverDesc').value
+            };
+            
+            const result = await apiCall('POST', '/api/servers', serverData);
+            if (result && result.id) {
+                showAlert('serversAlerts', 'Server erfolgreich hinzugefügt!', 'success');
+                closeModal('addServerModal');
+                await loadServers();
+            } else {
+                showAlert('serversAlerts', 'Fehler beim Hinzufügen des Servers', 'error');
+            }
+        }
+
+        // Neue Funktion: Server-spezifischen SSH-Key hochladen
+        async function uploadServerSSHKey(file) {
+            try {
+                const messageEl = document.getElementById('keyStatusMessage');
+                messageEl.style.display = 'block';
+                messageEl.innerHTML = '⏳ Hochladen des SSH-Keys...';
+                messageEl.style.background = '#fff3cd';
+                messageEl.style.color = '#856404';
+
+                const reader = new FileReader();
+                
+                return new Promise((resolve) => {
+                    reader.onload = async (e) => {
+                        const keyContent = e.target.result;
+                        const hostname = document.getElementById('serverHostname').value;
+                        
+                        if (!hostname) {
+                            messageEl.innerHTML = '❌ Bitte geben Sie zuerst einen Hostname ein';
+                            messageEl.style.background = '#f8d7da';
+                            messageEl.style.color = '#721c24';
+                            resolve(null);
+                            return;
+                        }
+
+                        try {
+                            const response = await fetch('/api/server-ssh-key/upload', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    hostname: hostname,
+                                    key_content: keyContent
+                                })
+                            });
+
+                            const data = await response.json();
+
+                            if (response.ok && data.success) {
+                                messageEl.innerHTML = '✅ SSH-Key erfolgreich hochgeladen!';
+                                messageEl.style.background = '#d4edda';
+                                messageEl.style.color = '#155724';
+                                resolve(data.key_path);
+                            } else {
+                                messageEl.innerHTML = '❌ Fehler: ' + (data.error || 'SSH-Key konnte nicht hochgeladen werden');
+                                messageEl.style.background = '#f8d7da';
+                                messageEl.style.color = '#721c24';
+                                resolve(null);
+                            }
+                        } catch (error) {
+                            messageEl.innerHTML = '❌ Fehler: ' + error.message;
+                            messageEl.style.background = '#f8d7da';
+                            messageEl.style.color = '#721c24';
+                            resolve(null);
+                        }
+                    };
+                    
+                    reader.readAsText(file);
+                });
+            } catch (error) {
+                console.error('Fehler beim Hochladen des SSH-Keys:', error);
+                return null;
+            }
+        }
+
+        async function saveSource(event) {
+            event.preventDefault();
+            
+            const sourceData = {
+                server_id: parseInt(document.getElementById('sourceServerId').value),
+                name: document.getElementById('sourceName').value,
+                remote_path: document.getElementById('sourceRemotePath').value,
+                description: document.getElementById('sourceDesc').value
+            };
+            
+            const result = await apiCall('POST', '/api/sources', sourceData);
+            if (result && result.id) {
+                showAlert('serversAlerts', 'Quelle erfolgreich hinzugefügt!', 'success');
+                closeModal('addSourceModal');
+                sources = [];
+                await loadServers();
+                await loadSources();
+            } else {
+                showAlert('serversAlerts', 'Fehler beim Hinzufügen der Quelle', 'error');
+            }
+        }
+
+        async function saveSchedule(event) {
+            event.preventDefault();
+            
+            const scheduleData = {
+                source_id: parseInt(document.getElementById('scheduleSourceId').value),
+                frequency: document.getElementById('scheduleFrequency').value
+            };
+            
+            const result = await apiCall('POST', '/api/schedules', scheduleData);
+            if (result && result.id) {
+                showAlert('backupsAlerts', 'Zeitplan erfolgreich erstellt!', 'success');
+                closeModal('addScheduleModal');
+                await loadSourceDetails();
+            } else {
+                showAlert('backupsAlerts', 'Fehler beim Erstellen des Zeitplans', 'error');
+            }
+        }
+
+        // ===== AKTIONS FUNKTIONEN =====
+        async function deleteServer(serverId) {
+            if (!confirm('Server wirklich löschen? Alle zugehörigen Quellen und Backups werden gelöscht.')) return;
+            
+            const result = await apiCall('DELETE', `/api/servers/${serverId}`);
+            if (result && result.success) {
+                showAlert('serversAlerts', 'Server gelöscht', 'success');
+                await loadServers();
+            } else {
+                showAlert('serversAlerts', 'Fehler beim Löschen', 'error');
+            }
+        }
+
+        async function startManualBackup(sourceId) {
+            const result = await apiCall('POST', `/api/backup/manual/${sourceId}`);
+            if (result && result.success) {
+                showAlert('backupsAlerts', 'Backup wird gestartet...', 'info');
+                setTimeout(() => loadSourceDetails(), 2000);
+            } else {
+                showAlert('backupsAlerts', 'Fehler beim Starten des Backups', 'error');
+            }
+        }
+
+        async function loadRecoveryJobs() {
+            const sourceId = document.getElementById('recoverySourceSelect').value;
+            if (!sourceId) {
+                document.getElementById('recoveryJobsList').innerHTML = '';
+                return;
+            }
+            
+            const archivesData = await apiCall('GET', `/api/borg/archives/${sourceId}`);
+            const recoveryDiv = document.getElementById('recoveryJobsList');
+            
+            if (!archivesData || !archivesData.archives || archivesData.archives.length === 0) {
+                recoveryDiv.innerHTML = `<p>${archivesData?.warning || 'Keine Backups verfügbar'}</p>`;
+                return;
+            }
+            
+            // Sortiere Archive nach Zeit (neueste zuerst)
+            const sorted = archivesData.archives.sort((a, b) => {
+                const timeA = new Date(a.time || a.start).getTime();
+                const timeB = new Date(b.time || b.start).getTime();
+                return timeB - timeA;
+            });
+            
+            let html = '<div class="card"><h2>Verfügbare Archive (neueste zuerst)</h2><table class="table"><thead><tr><th>Archive</th><th>Datum</th><th>Größe</th><th>Aktion</th></tr></thead><tbody>';
+            
+            for (const archive of sorted) {
+                const size = archive.size ? (archive.size / 1024 / 1024).toFixed(2) + ' MB' : '-';
+                const date = new Date(archive.time || archive.start).toLocaleString('de-DE');
+                html += `
+                    <tr>
+                        <td>${archive.name}</td>
+                        <td>${date}</td>
+                        <td>${size}</td>
+                        <td><button onclick="loadArchiveFiles('${sourceId}', '${encodeURIComponent(archive.name)}')">📂 Dateien</button></td>
+                    </tr>
+                `;
+            }
+            
+            html += '</tbody></table></div>';
+            recoveryDiv.innerHTML = html;
+        }
+
+        async function loadArchiveFiles(sourceId, archiveName) {
+            const filesData = await apiCall('GET', `/api/borg/files/${sourceId}/${archiveName}`);
+            const recoveryDiv = document.getElementById('recoveryJobsList');
+            
+            if (!filesData || !filesData.files || filesData.files.length === 0) {
+                recoveryDiv.innerHTML = '<p>Keine Dateien im Archiv</p>';
+                return;
+            }
+            
+            let html = `<div class="card">
+                <h2>Dateien in ${decodeURIComponent(archiveName)}</h2>
+                <button onclick="loadRecoveryJobs()" style="margin-bottom: 10px;">← Zurück</button>
+                <table class="table">
+                    <thead><tr><th>Dateiname</th><th>Größe</th><th>Aktion</th></tr></thead>
+                    <tbody>`;
+            
+            for (const file of filesData.files) {
+                const size = file.size ? (file.size / 1024).toFixed(2) + ' KB' : '-';
+                const displayName = file.path ? file.path.split('/').pop() : file.name;
+                html += `
+                    <tr>
+                        <td>${file.path || file.name}</td>
+                        <td>${size}</td>
+                        <td><button onclick="downloadFile('${sourceId}', '${archiveName}', '${(file.path || file.name).replace(/'/g, "\\'")}')">⬇️ Download</button></td>
+                    </tr>
+                `;
+            }
+            
+            html += '</tbody></table></div>';
+            recoveryDiv.innerHTML = html;
+        }
+
+        async function downloadFile(sourceId, archiveName, filePath) {
+            try {
+                const response = await fetch(`/api/borg/extract/${sourceId}/${archiveName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePath: filePath })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(`Fehler: ${error.error}`);
+                    return;
+                }
+                
+                // Download starten
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filePath.split('/').pop();
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                
+                showAlert('recoveryAlerts', 'Datei erfolgreich heruntergeladen', 'success');
+            } catch (error) {
+                showAlert('recoveryAlerts', 'Fehler beim Download: ' + error.message, 'error');
+            }
+        }
+
+        async function changePassword(event) {
+            event.preventDefault();
+            
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            if (newPassword !== confirmPassword) {
+                alert('Passwörter stimmen nicht überein');
+                return;
+            }
+            
+            alert('Passwortänderung wird in einer zukünftigen Version implementiert');
+            closeModal('changePasswordModal');
+        }
+
+        async function logout() {
+            await apiCall('GET', '/api/logout');
+            window.location.href = '/login.html';
+        }
+
+        // ===== UI FUNKTIONEN =====
+        async function triggerCompact() {
+            const btn = document.getElementById('compactBtn');
+            const statusDiv = document.getElementById('compactStatus');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Kompaktierung läuft...';
+            statusDiv.innerHTML = '<p style="color: #2196F3;">⏳ Starte Kompaktierung aller Repositories...</p>';
+            
+            try {
+                const result = await apiCall('POST', '/api/borg/compact');
+                
+                if (result.success) {
+                    statusDiv.innerHTML = `<p style="color: #4CAF50;">✓ Kompaktierung erfolgreich abgeschlossen!</p><p style="color: #666; font-size: 0.9rem;">${result.message}</p>`;
+                } else {
+                    statusDiv.innerHTML = `<p style="color: #f44336;">✗ Fehler: ${result.error}</p>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<p style="color: #f44336;">✗ Fehler: ${error.message}</p>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🗜️ Repositories kompaktieren';
+            }
+        }
+
+        async function loadBackupBasePath() {
+            const config = await apiCall('GET', '/api/config');
+            if (!config) return;
+            
+            const backupPathConfig = config.find(c => c.key === 'backup_base_path');
+            if (backupPathConfig) {
+                document.getElementById('backupBasePath').value = backupPathConfig.value;
+            }
+        }
+
+        async function saveBackupBasePath() {
+            const newPath = document.getElementById('backupBasePath').value.trim();
+            const messageDiv = document.getElementById('backupPathMessage');
+            
+            if (!newPath) {
+                messageDiv.innerHTML = '<p style="color: #f44336;">❌ Bitte geben Sie einen Pfad ein.</p>';
+                return;
+            }
+            
+            if (!newPath.startsWith('/')) {
+                messageDiv.innerHTML = '<p style="color: #f44336;">❌ Bitte geben Sie einen absoluten Pfad ein (beginnend mit /).</p>';
+                return;
+            }
+            
+            messageDiv.innerHTML = '<p style="color: #2196F3;">⏳ Speichere...</p>';
+            
+            try {
+                const result = await apiCall('PUT', '/api/config/backup_base_path', { value: newPath });
+                if (result) {
+                    messageDiv.innerHTML = '<p style="color: #4CAF50;">✓ Speicherort erfolgreich aktualisiert!</p>';
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    messageDiv.innerHTML = '<p style="color: #f44336;">❌ Fehler beim Speichern.</p>';
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<p style="color: #f44336;">❌ Fehler: ${error.message}</p>`;
+            }
+        }
+
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Load data based on tab
+            if (tabName === 'servers') {
+                loadServers();
+            } else if (tabName === 'backups') {
+                loadSources();
+            } else if (tabName === 'admin') {
+                loadBackupBasePath();
+            }
+        }
+
+        function showAlert(containerId, message, type) {
+            const container = document.getElementById(containerId);
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            
+            container.innerHTML = '';
+            container.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        // ===== SSH-KEY MANAGEMENT FUNKTIONEN =====
+
+        /**
+         * Lädt den SSH-Key Status vom Admin-Endpoint
+         */
+        async function loadSSHKeyStatus() {
+            const statusEl = document.getElementById('sshKeyStatusText');
+            const messageEl = document.getElementById('sshKeyMessage');
+            
+            try {
+                const response = await fetch('/api/admin/ssh-key-status', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Basic ' + btoa('admin:admin')
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    const { hasPrivateKey, hasPublicKey } = data;
+                    if (hasPrivateKey && hasPublicKey) {
+                        statusEl.innerHTML = '✅ SSH-Key ist konfiguriert und aktiv';
+                        statusEl.style.color = '#4CAF50';
+                    } else {
+                        statusEl.innerHTML = '⚠️ SSH-Key nicht vollständig konfiguriert';
+                        statusEl.style.color = '#ff9800';
+                    }
+                } else if (data.error) {
+                    statusEl.innerHTML = '⚠️ SSH-Key nicht konfiguriert';
+                    statusEl.style.color = '#ff9800';
+                } else {
+                    statusEl.innerHTML = '❌ Fehler beim Laden des Status';
+                    statusEl.style.color = '#f44336';
+                }
+            } catch (error) {
+                console.error('Fehler beim Laden SSH-Key Status:', error);
+                statusEl.innerHTML = '❌ Verbindungsfehler';
+                statusEl.style.color = '#f44336';
+            }
+        }
+
+        /**
+         * Lädt SSH-Key hoch
+         */
+        async function uploadSSHKey() {
+            const fileInput = document.getElementById('sshKeyFileInput');
+            const messageEl = document.getElementById('sshKeyMessage');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                messageEl.innerHTML = '❌ Bitte wählen Sie eine SSH-Key Datei';
+                messageEl.style.background = '#ffebee';
+                messageEl.style.color = '#c62828';
+                messageEl.style.display = 'block';
+                return;
+            }
+            
+            try {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const keyContent = e.target.result;
+                    
+                    try {
+                        const response = await fetch('/api/admin/ssh-key-upload', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Basic ' + btoa('admin:admin'),
+                                'Content-Type': 'text/plain'
+                            },
+                            body: keyContent
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok && data.success) {
+                            messageEl.innerHTML = '✅ SSH-Key erfolgreich hochgeladen!';
+                            messageEl.style.background = '#e8f5e9';
+                            messageEl.style.color = '#2e7d32';
+                            messageEl.style.display = 'block';
+                            fileInput.value = '';
+                            
+                            // Aktualisiere Status nach 2 Sekunden
+                            setTimeout(() => {
+                                loadSSHKeyStatus();
+                            }, 2000);
+                        } else {
+                            messageEl.innerHTML = '❌ Fehler: ' + (data.error || 'SSH-Key konnte nicht hochgeladen werden');
+                            messageEl.style.background = '#ffebee';
+                            messageEl.style.color = '#c62828';
+                            messageEl.style.display = 'block';
+                        }
+                    } catch (error) {
+                        console.error('Upload-Fehler:', error);
+                        messageEl.innerHTML = '❌ Uploadfehler: ' + error.message;
+                        messageEl.style.background = '#ffebee';
+                        messageEl.style.color = '#c62828';
+                        messageEl.style.display = 'block';
+                    }
+                };
+                reader.readAsText(file);
+            } catch (error) {
+                console.error('Fehler beim Lesen der Datei:', error);
+                messageEl.innerHTML = '❌ Fehler beim Lesen der Datei';
+                messageEl.style.background = '#ffebee';
+                messageEl.style.color = '#c62828';
+                messageEl.style.display = 'block';
+            }
+        }
+
+        /**
+         * Downloadet SSH-Key
+         */
+        async function downloadSSHKey() {
+            const messageEl = document.getElementById('sshKeyMessage');
+            
+            try {
+                const response = await fetch('/api/admin/ssh-key-download', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Basic ' + btoa('admin:admin')
+                    }
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = 'default-key';
+                    document.body.appendChild(link);
+                    link.click();
+                    window.URL.revokeObjectURL(url);
+                    link.remove();
+                    
+                    messageEl.innerHTML = '✅ SSH-Key erfolgreich heruntergeladen';
+                    messageEl.style.background = '#e8f5e9';
+                    messageEl.style.color = '#2e7d32';
+                    messageEl.style.display = 'block';
+                } else {
+                    const data = await response.json();
+                    messageEl.innerHTML = '❌ Download-Fehler: ' + (data.error || 'SSH-Key konnte nicht heruntergeladen werden');
+                    messageEl.style.background = '#ffebee';
+                    messageEl.style.color = '#c62828';
+                    messageEl.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Download-Fehler:', error);
+                messageEl.innerHTML = '❌ Fehler: ' + error.message;
+                messageEl.style.background = '#ffebee';
+                messageEl.style.color = '#c62828';
+                messageEl.style.display = 'block';
+            }
+        }
+
+        /**
+         * Löscht SSH-Key
+         */
+        async function deleteSSHKey() {
+            const messageEl = document.getElementById('sshKeyMessage');
+            
+            if (!confirm('Sind Sie sicher, dass Sie den SSH-Key löschen möchten? Das System wird dann keinen Default SSH-Key haben!')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/admin/ssh-key-delete', {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': 'Basic ' + btoa('admin:admin')
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    messageEl.innerHTML = '✅ SSH-Key erfolgreich gelöscht';
+                    messageEl.style.background = '#e8f5e9';
+                    messageEl.style.color = '#2e7d32';
+                    messageEl.style.display = 'block';
+                    
+                    // Aktualisiere Status
+                    setTimeout(() => {
+                        loadSSHKeyStatus();
+                    }, 1000);
+                } else {
+                    messageEl.innerHTML = '❌ Fehler: ' + (data.error || 'SSH-Key konnte nicht gelöscht werden');
+                    messageEl.style.background = '#ffebee';
+                    messageEl.style.color = '#c62828';
+                    messageEl.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Fehler beim Löschen:', error);
+                messageEl.innerHTML = '❌ Fehler: ' + error.message;
+                messageEl.style.background = '#ffebee';
+                messageEl.style.color = '#c62828';
+                messageEl.style.display = 'block';
+            }
+        }
+
+        // ===== STARTUP =====
+        window.addEventListener('DOMContentLoaded', () => {
+            init();
+            // Lade SSH-Key Status wenn Admin-Tab initialisiert wird
+            loadSSHKeyStatus();
+        });
+    </script>
+</body>
+</html>
