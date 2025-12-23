@@ -47,7 +47,7 @@ fi
 # Prüfe alle erforderlichen Tabellen
 echo ""
 echo "📝 Prüfe alle Tabellen:"
-TABLES=("users" "servers" "sources" "backups" "backup_config" "backup_schedules" "audit_log" "backup_jobs" "recovery_files")
+TABLES=("users" "backup_servers" "backup_sources" "backup_schedules" "backup_jobs" "recovery_files" "backup_config" "audit_log" "servers" "sources" "backups")
 for table in "${TABLES[@]}"; do
     echo -n "   - $table... "
     if psql -U borg -d bbui -h localhost -c "SELECT 1 FROM information_schema.tables WHERE table_name='$table'" 2>/dev/null | grep -q 1; then
