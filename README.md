@@ -2,9 +2,9 @@
 
 Ein vollständiges, webbasiertes Backup-Verwaltungssystem für Borg Backup mit Server-Management, automatischen Zeitplänen, Tar-Streaming über SSH und benutzerfreundlichem Recovery-Interface.
 
-![BBUI Dashboard](https://via.placeholder.com/800x400?text=BBUI+Dashboard)
+![BBUI Dashboard](https://github.com/bmetallica/bbui/blob/main/sc.png)
 
-## �� Kernfunktionen
+## Kernfunktionen
 
 ### 📊 Dashboard & Übersicht
 - **Zentrale Verwaltungsplattform**: Gesamtübersicht aller Backup-Server und Quellen
