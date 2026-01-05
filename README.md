@@ -1,6 +1,6 @@
 # 💾 BBUI – Borg Backup Management Interface
 
-Ein vollständiges, webbasiertes Backup-Verwaltungssystem für Borg Backup mit Server-Management, automatischen Zeitplänen, SSHFS-Mounting und benutzerfreundlichem Recovery-Interface.
+Ein vollständiges, webbasiertes Backup-Verwaltungssystem für Borg Backup mit Server-Management, automatischen Zeitplänen, Tar-Streaming über SSH und benutzerfreundlichem Recovery-Interface.
 
 ![BBUI Dashboard](https://via.placeholder.com/800x400?text=BBUI+Dashboard)
 
@@ -63,7 +63,6 @@ Ein vollständiges, webbasiertes Backup-Verwaltungssystem für Borg Backup mit S
 - **Node.js** 16+ mit npm
 - **PostgreSQL** 12+ Datenbank
 - **Borg Backup** installiert (`apt install borgbackup`)
-- **SSHFS** für Remote-Backups (`apt install sshfs`)
 - **Root-Zugriff** für SSHFS-Mounting und Verzeichnis-Verwaltung
 
 ---
