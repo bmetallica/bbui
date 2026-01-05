@@ -19,7 +19,6 @@ Ein vollständiges, webbasiertes Backup-Verwaltungssystem für Borg Backup mit S
   - Server-spezifische Custom SSH-Keys
   - Public- und Private-Key-Upload
 - **Automatische Quellen-Verwaltung**: Konfiguriere Remote-Pfade für Backups
-- **SSHFS-Mounting**: Automatisches Mounting und Unmounting während Backups
 - **Backup-Repositories**: Automatische Erstellung und Verwaltung von Borg-Repositories
 
 ### ⏰ Automatisierung
@@ -63,7 +62,7 @@ Ein vollständiges, webbasiertes Backup-Verwaltungssystem für Borg Backup mit S
 - **Node.js** 16+ mit npm
 - **PostgreSQL** 12+ Datenbank
 - **Borg Backup** installiert (`apt install borgbackup`)
-- **Root-Zugriff** für SSHFS-Mounting und Verzeichnis-Verwaltung
+- **Root-Zugriff** 
 
 ---
 
@@ -233,19 +232,6 @@ Standard-Zugangsdaten:
 
 ```bash
 sudo chmod 777 /mnt/backup-sources
-```
-
-### SSHFS-Mount schlägt fehl
-
-```bash
-# SSHFS installiert?
-apt install sshfs
-
-# SSH-Key vorhanden?
-ls -la /opt/bbui/bbui-borg/keys/default-key
-
-# SSH-Zugriff testbar?
-ssh -i /opt/bbui/bbui-borg/keys/default-key user@host ls -la /remote/path
 ```
 
 ### Logs prüfen
