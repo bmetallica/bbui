@@ -842,6 +842,45 @@ app.get('/api/jobs/:sourceId', async (req, res) => {
 });
 
 /**
+ * POST /api/servers/:serverId/test-connection - SSH-Verbindung testen
+ */
+app.post('/api/servers/:serverId/test-connection', async (req, res) => {
+    const { serverId } = req.params;
+
+    try {
+        const serverResult = await pool.query(
+            'SELECT hostname, ssh_port, ssh_user, ssh_key_path FROM backup_servers WHERE id = $1',
+            [serverId]
+        );
+
+        if (serverResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Server nicht gefunden' });
+        }
+
+        const server = serverResult.rows[0];
+
+        // Akzeptiere Host-Key
+        await acceptHostKey(server.hostname, server.ssh_port || 22);
+
+        // Teste SSH-Verbindung
+        const sshOpts = `-o IdentityFile="${server.ssh_key_path}" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${path.join(process.env.HOME || '/root', '.ssh', 'known_hosts')} -o ConnectTimeout=5`;
+        const { stdout } = await execPromise(
+            `ssh ${sshOpts} ${server.ssh_user}@${server.hostname} "echo 'SSH-Verbindung erfolgreich'"`
+        );
+
+        console.log(`[SSH-TEST] Erfolgreich für Server ${serverId}`);
+        res.json({ success: true, message: 'SSH-Verbindung erfolgreich', output: stdout });
+    } catch (error) {
+        console.error(`[SSH-TEST] Fehler für Server ${serverId}:`, error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'SSH-Verbindung fehlgeschlagen',
+            details: error.message
+        });
+    }
+});
+
+/**
  * POST /api/backup/manual/:sourceId - Manuelles Backup starten
  */
 app.post('/api/backup/manual/:sourceId', async (req, res) => {
@@ -894,7 +933,7 @@ app.get('/api/borg/archives/:sourceId', async (req, res) => {
         const repoPath = path.join(BACKUP_BASE_PATH, `server_${server.server_id}_source_${sourceId}`);
 
         try {
-            const { stdout } = await execPromise(`borg list --json "${repoPath}"`);
+            const { stdout } = await execPromise(`borg list --json "${repoPath}"`, { maxBuffer: 50 * 1024 * 1024 });
             const data = JSON.parse(stdout);
             const archives = data.archives || [];
             res.json({ archives });
@@ -909,10 +948,11 @@ app.get('/api/borg/archives/:sourceId', async (req, res) => {
 });
 
 /**
- * GET /api/borg/files/:sourceId/:archiveName - Liste Dateien in einem Archive
+ * GET /api/borg/files/:sourceId/:archiveName - Liste Dateien mit hierarchischer Ordnerstruktur
  */
 app.get('/api/borg/files/:sourceId/:archiveName', async (req, res) => {
     const { sourceId, archiveName } = req.params;
+    const folderPath = req.query.folder || ''; // z.B. /home/user oder ''
 
     try {
         const sourceResult = await pool.query(
@@ -928,15 +968,167 @@ app.get('/api/borg/files/:sourceId/:archiveName', async (req, res) => {
         const repoPath = path.join(BACKUP_BASE_PATH, `server_${server.server_id}_source_${sourceId}`);
         const decodedArchiveName = decodeURIComponent(archiveName);
 
-        const { stdout } = await execPromise(`borg list --json-lines "${repoPath}::${decodedArchiveName}"`);
-        const files = stdout.trim().split('\n').filter(line => line).map(line => {
+        console.log(`[BORG] Listing files for archive: ${decodedArchiveName}, folder filter: "${folderPath}"`);
+
+        // Erhöhe maxBuffer für große Archive (z.B. mit node_modules)
+        const { stdout } = await execPromise(`borg list --json-lines "${repoPath}::${decodedArchiveName}"`, { maxBuffer: 50 * 1024 * 1024 });
+        const allFiles = stdout.trim().split('\n').filter(line => line).map(line => {
             try { return JSON.parse(line); } catch (e) { return null; }
         }).filter(f => f !== null);
 
-        res.json({ files });
+        console.log(`[BORG] Total files from archive: ${allFiles.length}`);
+
+        // Baue hierarchische Struktur auf
+        const rootPath = folderPath || '';
+        const items = new Map();
+        const folders = new Set();
+
+        for (const file of allFiles) {
+            let filePath = file.path || '';
+            
+            // Filtere nach aktuellem Ordner
+            let shouldInclude = false;
+            
+            if (!rootPath) {
+                // Root: zeige alle Dateien (wir filtern später auf direkte Kinder)
+                shouldInclude = true;
+            } else {
+                // Subfolder: nur Dateien die mit rootPath/ anfangen
+                if (filePath.startsWith(rootPath + '/')) {
+                    shouldInclude = true;
+                }
+            }
+            
+            if (!shouldInclude) {
+                continue;
+            }
+            
+            // Jetzt berechne relative Pfad
+            let relativePath;
+            if (rootPath) {
+                // Entferne rootPath aus dem Anfang
+                if (filePath.startsWith(rootPath + '/')) {
+                    relativePath = filePath.substring(rootPath.length + 1);
+                } else {
+                    continue;
+                }
+            } else {
+                relativePath = filePath;
+            }
+
+            if (!relativePath) continue;
+
+            const parts = relativePath.split('/').filter(p => p);
+            if (parts.length === 0) continue;
+            
+            // Registriere parent folders
+            let currentPath = rootPath ? rootPath : '';
+            for (let i = 0; i < parts.length - 1; i++) {
+                currentPath = currentPath ? currentPath + '/' + parts[i] : parts[i];
+                folders.add(currentPath);
+            }
+
+            // Wenn das eine Datei/Ordner im direkten Ordner ist (parts.length === 1)
+            if (parts.length === 1) {
+                const fullPath = rootPath ? rootPath + '/' + parts[0] : parts[0];
+                items.set(fullPath, {
+                    path: fullPath,
+                    name: parts[0],
+                    type: file.type === 'd' ? 'directory' : 'file',
+                    size: file.size || 0,
+                    mtime: file.mtime,
+                    isFolder: file.type === 'd'
+                });
+            } else {
+                // Unterordner im aktuellen - nur den direkten Ordner anzeigen
+                const firstDirPath = rootPath ? rootPath + '/' + parts[0] : parts[0];
+                if (!items.has(firstDirPath)) {
+                    items.set(firstDirPath, {
+                        path: firstDirPath,
+                        name: parts[0],
+                        type: 'directory',
+                        size: 0,
+                        mtime: null,
+                        isFolder: true
+                    });
+                }
+            }
+        }
+
+        console.log(`[BORG] Files after filtering for folder "${folderPath}": ${items.size}`);
+
+        // Sortiere: Ordner zuerst, dann Dateien
+        const result = Array.from(items.values())
+            .sort((a, b) => {
+                if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+                return a.name.localeCompare(b.name);
+            });
+
+        res.json({ 
+            files: result,
+            currentPath: folderPath
+        });
     } catch (error) {
         console.error('[RECOVERY] Datei-Fehler:', error);
         res.status(500).json({ error: 'Fehler beim Auflisten von Dateien' });
+    }
+});
+
+/**
+ * POST /api/borg/extract-folder/:sourceId/:archiveName - Ordner als ZIP herunterladen
+ */
+app.post('/api/borg/extract-folder/:sourceId/:archiveName', async (req, res) => {
+    const { sourceId, archiveName } = req.params;
+    const { folderPath } = req.body;
+
+    if (!folderPath) {
+        return res.status(400).json({ error: 'folderPath erforderlich' });
+    }
+
+    try {
+        const sourceResult = await pool.query(
+            'SELECT bs.id as server_id FROM backup_sources bso JOIN backup_servers bs ON bso.server_id = bs.id WHERE bso.id = $1',
+            [sourceId]
+        );
+        
+        if (sourceResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Quelle nicht gefunden' });
+        }
+
+        const server = sourceResult.rows[0];
+        const repoPath = path.join(BACKUP_BASE_PATH, `server_${server.server_id}_source_${sourceId}`);
+        const decodedArchiveName = decodeURIComponent(archiveName);
+        
+        const tmpDir = path.join('/tmp', `borg-extract-${Date.now()}-${sourceId}`);
+        const zipName = path.basename(folderPath) || 'backup';
+
+        // Erstelle temporäres Verzeichnis
+        await execPromise(`mkdir -p "${tmpDir}"`);
+
+        // Extrahiere den gesamten Ordner
+        await execPromise(`cd "${tmpDir}" && borg extract "${repoPath}::${decodedArchiveName}" "${folderPath}"`, { maxBuffer: 50 * 1024 * 1024 });
+
+        // Erstelle ZIP-Datei mit zip-Befehl
+        const zipPath = path.join('/tmp', `${zipName}-${Date.now()}.zip`);
+        const extractedPath = path.join(tmpDir, folderPath);
+
+        if (!fs.existsSync(extractedPath)) {
+            throw new Error('Ordner nach Extraktion nicht gefunden');
+        }
+
+        // Nutze zip-Befehl um Ordner zu komprimieren
+        await execPromise(`cd "${tmpDir}" && zip -r "${zipPath}" "${folderPath}"`);
+
+        // Download mit automatischer Bereinigung
+        res.download(zipPath, `${zipName}.zip`, (err) => {
+            try {
+                fs.unlinkSync(zipPath);
+                execPromise(`rm -rf "${tmpDir}"`).catch(() => {});
+            } catch (e) {}
+        });
+    } catch (error) {
+        console.error('[RECOVERY] Folder-Extract-Fehler:', error);
+        res.status(500).json({ error: 'Fehler beim Extrahieren des Ordners: ' + error.message });
     }
 });
 
@@ -967,7 +1159,7 @@ app.post('/api/borg/extract/:sourceId/:archiveName', async (req, res) => {
         const tmpDir = path.join('/tmp', `borg-extract-${Date.now()}`);
 
         await execPromise(`mkdir -p "${tmpDir}"`);
-        await execPromise(`cd "${tmpDir}" && borg extract "${repoPath}::${decodedArchiveName}" "${filePath}"`);
+        await execPromise(`cd "${tmpDir}" && borg extract "${repoPath}::${decodedArchiveName}" "${filePath}"`, { maxBuffer: 50 * 1024 * 1024 });
 
         const fullPath = path.join(tmpDir, filePath);
         
@@ -1033,35 +1225,94 @@ app.get('/api/recovery/:sourceId', async (req, res) => {
 // ===== HILFSFUNKTIONEN =====
 
 /**
+ * Akzeptiert Host-Key vor der SSH-Verbindung automatisch
+ */
+async function acceptHostKey(hostname, ssh_port = 22) {
+    try {
+        // Nutze ssh-keyscan um den Host-Key zu erfassen und zu known_hosts hinzuzufügen
+        const { stdout } = await execPromise(`ssh-keyscan -p ${ssh_port} ${hostname} 2>/dev/null`);
+        if (stdout) {
+            const knownHostsPath = path.join(process.env.HOME || '/root', '.ssh', 'known_hosts');
+            const sshDir = path.dirname(knownHostsPath);
+            
+            // Stelle sicher, dass .ssh Verzeichnis existiert
+            if (!fs.existsSync(sshDir)) {
+                fs.mkdirSync(sshDir, { mode: 0o700 });
+            }
+            
+            // Prüfe ob Host bereits in known_hosts
+            try {
+                const currentContent = fs.readFileSync(knownHostsPath, 'utf8');
+                if (!currentContent.includes(hostname)) {
+                    fs.appendFileSync(knownHostsPath, stdout);
+                    console.log(`[SSH] Host-Key für ${hostname} akzeptiert`);
+                }
+            } catch (e) {
+                // known_hosts existiert noch nicht
+                fs.writeFileSync(knownHostsPath, stdout, { mode: 0o600 });
+                console.log(`[SSH] known_hosts erstellt und Host-Key für ${hostname} hinzugefügt`);
+            }
+        }
+    } catch (error) {
+        console.warn(`[SSH] Konnte Host-Key für ${hostname} nicht automatisch akzeptieren:`, error.message);
+        // Nicht kritisch - wir setzen SSH-Optionen zur Fallback
+    }
+}
+
+/**
  * Führt ein Backup aus
  */
 async function executeBackup(sourceId, source) {
     const jobId = await createBackupJob(sourceId);
-    const mountPath = path.join(SSHFS_MOUNT_BASE, `source_${sourceId}`);
     const repoPath = path.join(BACKUP_BASE_PATH, `server_${source.server_id}_source_${sourceId}`);
 
     try {
         console.log(`[BACKUP] Start für Source ${sourceId}`);
 
-        // 1. Stelle sicher, dass Mount-Verzeichnis existiert
-        await execPromise(`mkdir -p "${mountPath}"`);
+        // 1. Akzeptiere Host-Key automatisch (falls noch nicht bekannt)
+        await acceptHostKey(source.hostname, source.ssh_port || 22);
 
-        // 2. Mount SSHFS
-        await execPromise(
-            `sshfs -o IdentityFile="${source.ssh_key_path}" ${source.ssh_user}@${source.hostname}:${source.remote_path} "${mountPath}"`
-        );
-
-        // 3. Initialisiere Borg Repository falls nötig
+        // 2. Initialisiere Borg Repository falls nötig
         if (!fs.existsSync(path.join(repoPath, "config"))) {
             await execPromise(`mkdir -p "${repoPath}"`);
             await execPromise(`borg init --encryption=none "${repoPath}"`);
         }
 
-        // 4. Führe Borg Backup durch mit optimierten Parametern für Deduplizierung
+        // 3. Erstelle Archiv-Name
         const archiveName = `backup_${new Date().toISOString().replace(/:/g, '-')}`;
-        const { stdout, stderr } = await execPromise(
-            `borg create --progress --compression auto,zstd,10 --chunker-params 10,23,16,4095 "${repoPath}::${archiveName}" "${mountPath}"`
-        );
+        
+        // 4. Read-Only mit Sudo: Tar streamt Dateien, wird lokal extrahiert, dann zu Borg
+        // Sudo wird NICHT zur Änderung der Berechtigungen verwendet, sondern nur zum LESEN
+        const sshKeyOpt = source.ssh_key_path ? `-i "${source.ssh_key_path}"` : '';
+        const knownHostsPath = path.join(process.env.HOME || '/root', '.ssh', 'known_hosts');
+        const sshOpts = `-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${knownHostsPath}`;
+        
+        // Escapte den Remote-Pfad für Shell-Sicherheit
+        const escapedPath = source.remote_path.replace(/'/g, "'\\''");
+        
+        // Temp-Verzeichnis für Tar-Extraktion
+        const tempDir = `/tmp/backup-${sourceId}-${Date.now()}`;
+        
+        // Tar mit Sudo auf Remote-Server
+        const tarCommand = `ssh ${sshKeyOpt} ${sshOpts} ${source.ssh_user}@${source.hostname} "sudo tar -cf - '${escapedPath}' 2>/dev/null"`;
+        
+        // Erstelle Temp-Dir und extrahiere Tar dort hin
+        console.log(`[BACKUP] Erstelle Temp-Verzeichnis: ${tempDir}`);
+        await execPromise(`mkdir -p "${tempDir}"`);
+        
+        console.log(`[BACKUP] Extrahiere Tar-Stream von ${source.hostname}:${source.remote_path} nach ${tempDir}`);
+        const extractCommand = `${tarCommand} | tar -xf - -C "${tempDir}"`;
+        await execPromise(extractCommand);
+        
+        // Borg Backup des extrahierten Verzeichnisses mit voller Struktur
+        const borgCommand = `borg create --progress --compression auto,zstd,10 --chunker-params 10,23,16,4095 "${repoPath}::${archiveName}" "${tempDir}"`;
+        
+        console.log(`[BACKUP] Backe extrahierte Dateien mit Borg`);
+        const { stdout, stderr } = await execPromise(borgCommand);
+        
+        // Räume Temp-Verzeichnis auf
+        console.log(`[BACKUP] Räume Temp-Verzeichnis auf`);
+        await execPromise(`rm -rf "${tempDir}"`);
 
         // 5. Aktualisiere Job mit Erfolg
         await pool.query(
@@ -1069,24 +1320,18 @@ async function executeBackup(sourceId, source) {
             ['success', archiveName, jobId]
         );
 
-        console.log(`[BACKUP] Abgeschlossen für Source ${sourceId}`);
-
-        // 6. Unmount
-        await execPromise(`umount "${mountPath}"`);
+        console.log(`[BACKUP] Erfolgreich abgeschlossen für Source ${sourceId}`);
 
     } catch (error) {
-        console.error(`[BACKUP] Fehler für Source ${sourceId}:`, error);
+        console.error(`[BACKUP] Fehler für Source ${sourceId}:`, error.message);
+        
+        // Extrahiere Fehlerdetails aus stderr
+        const errorDetails = error.stderr || error.message || 'Unbekannter Fehler beim Backup';
+        
         await pool.query(
             'UPDATE backup_jobs SET status = $1, error_message = $2, end_time = NOW() WHERE id = $3',
-            ['failed', error.message, jobId]
+            ['failed', errorDetails, jobId]
         );
-
-        // Versuche zu unmounten
-        try {
-            await execPromise(`umount "${mountPath}"`);
-        } catch (e) {
-            console.error('[BACKUP] Fehler beim Unmount:', e);
-        }
     }
 }
 
