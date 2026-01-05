@@ -812,6 +812,7 @@
                                 <p><strong>Status:</strong> <span class="status-${server.status || 'unknown'}">${server.status || 'unbekannt'}</span></p>
                             </div>
                             <div class="action-buttons">
+                                <button onclick="testServerConnection(${server.id}, '${server.name}')">🔗 Verbindung testen</button>
                                 <button onclick="openAddSourceModal(${server.id})">+ Quelle</button>
                                 <button class="danger-btn" onclick="deleteServer(${server.id})">Löschen</button>
                             </div>
@@ -821,6 +822,51 @@
                 `;
             }
             document.getElementById('serversList').innerHTML = html || '<p>Keine Server konfiguriert.</p>';
+            
+            // Lade Quellen für jeden Server
+            for (const server of servers) {
+                await loadServerSources(server.id);
+            }
+        }
+
+        async function loadServerSources(serverId) {
+            const data = await apiCall('GET', `/api/sources/${serverId}`);
+            const sourcesDiv = document.getElementById(`sources-${serverId}`);
+            
+            if (!data || data.length === 0) {
+                sourcesDiv.innerHTML = '<p style="color: #999; font-size: 12px;">Keine Quellen</p>';
+                return;
+            }
+            
+            let html = '<div style="background: #f9f9f9; padding: 10px; border-radius: 4px; border-left: 3px solid #667eea;">';
+            html += '<strong style="display: block; margin-bottom: 8px;">📂 Backup-Quellen:</strong>';
+            
+            for (const source of data) {
+                html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #eee;">
+                        <div>
+                            <div><strong>${source.name}</strong></div>
+                            <div style="font-size: 11px; color: #666;">${source.remote_path}</div>
+                        </div>
+                        <button class="danger-btn" style="padding: 4px 8px; font-size: 11px;" onclick="deleteSource(${source.id})">🗑️</button>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            sourcesDiv.innerHTML = html;
+        }
+
+        async function deleteSource(sourceId) {
+            if (!confirm('Quelle wirklich löschen? Alle zugehörigen Backups werden auch gelöscht.')) return;
+            
+            const result = await apiCall('DELETE', `/api/sources/${sourceId}`);
+            if (result && result.success) {
+                showAlert('serversAlerts', 'Quelle gelöscht', 'success');
+                await loadServers();
+            } else {
+                showAlert('serversAlerts', 'Fehler beim Löschen der Quelle', 'error');
+            }
         }
 
         async function loadSources() {
@@ -1148,6 +1194,40 @@
             }
         }
 
+        async function testServerConnection(serverId, serverName) {
+            try {
+                const alertDiv = document.getElementById('serversAlerts');
+                alertDiv.innerHTML = '⏳ Teste SSH-Verbindung zu ' + serverName + '...';
+                alertDiv.style.display = 'block';
+                alertDiv.style.background = '#d1ecf1';
+                alertDiv.style.color = '#0c5460';
+                
+                const response = await fetch(`/api/servers/${serverId}/test-connection`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    alertDiv.innerHTML = `✅ <strong>Verbindung erfolgreich!</strong><br/>SSH-Verbindung zu ${serverName} ist funktionsfähig.<br/>Der Host-Key wurde akzeptiert.`;
+                    alertDiv.style.background = '#d4edda';
+                    alertDiv.style.color = '#155724';
+                } else {
+                    alertDiv.innerHTML = `❌ <strong>Verbindung fehlgeschlagen</strong><br/>${data.error || 'Unbekannter Fehler'}<br/><code>${data.details || ''}</code>`;
+                    alertDiv.style.background = '#f8d7da';
+                    alertDiv.style.color = '#721c24';
+                }
+                
+                setTimeout(() => {
+                    alertDiv.style.display = 'none';
+                }, 5000);
+            } catch (error) {
+                console.error('SSH-Test Fehler:', error);
+                showAlert('serversAlerts', 'Fehler beim Testen der Verbindung: ' + error.message, 'error');
+            }
+        }
+
         async function loadRecoveryJobs() {
             const sourceId = document.getElementById('recoverySourceSelect').value;
             if (!sourceId) {
@@ -1189,8 +1269,16 @@
             recoveryDiv.innerHTML = html;
         }
 
+        // Globale Variablen für Recovery-Navigation
+        let currentRecoverySourceId = null;
+        let currentRecoveryArchiveName = null;
+
         async function loadArchiveFiles(sourceId, archiveName) {
-            const filesData = await apiCall('GET', `/api/borg/files/${sourceId}/${archiveName}`);
+            // Speichere aktuell ausgewähltes Archiv
+            currentRecoverySourceId = sourceId;
+            currentRecoveryArchiveName = archiveName;
+            
+            const filesData = await apiCall('GET', `/api/borg/files/${sourceId}/${archiveName}?folder=`);
             const recoveryDiv = document.getElementById('recoveryJobsList');
             
             if (!filesData || !filesData.files || filesData.files.length === 0) {
@@ -1198,27 +1286,131 @@
                 return;
             }
             
-            let html = `<div class="card">
-                <h2>Dateien in ${decodeURIComponent(archiveName)}</h2>
-                <button onclick="loadRecoveryJobs()" style="margin-bottom: 10px;">← Zurück</button>
-                <table class="table">
-                    <thead><tr><th>Dateiname</th><th>Größe</th><th>Aktion</th></tr></thead>
-                    <tbody>`;
+            renderFileTree(sourceId, archiveName, filesData, recoveryDiv, '');
+        }
+
+        async function browseFolder(sourceId, archiveName, folderPath) {
+            // Stelle sicher, dass wir das richtige Archiv verwenden
+            currentRecoverySourceId = sourceId;
+            currentRecoveryArchiveName = archiveName;
             
-            for (const file of filesData.files) {
-                const size = file.size ? (file.size / 1024).toFixed(2) + ' KB' : '-';
-                const displayName = file.path ? file.path.split('/').pop() : file.name;
-                html += `
-                    <tr>
-                        <td>${file.path || file.name}</td>
-                        <td>${size}</td>
-                        <td><button onclick="downloadFile('${sourceId}', '${archiveName}', '${(file.path || file.name).replace(/'/g, "\\'")}')">⬇️ Download</button></td>
-                    </tr>
-                `;
+            console.log('📂 Navigiere zu Ordner:', {sourceId, archiveName, folderPath});
+            
+            const filesData = await apiCall('GET', `/api/borg/files/${sourceId}/${archiveName}?folder=${encodeURIComponent(folderPath)}`);
+            const recoveryDiv = document.getElementById('recoveryJobsList');
+            
+            if (!filesData || !filesData.files) {
+                console.error('Fehler beim Laden:', filesData);
+                recoveryDiv.innerHTML = '<p>Fehler beim Laden des Ordners</p>';
+                return;
+            }
+            
+            if (filesData.files.length === 0) {
+                recoveryDiv.innerHTML = '<p>Dieser Ordner ist leer</p>';
+                return;
+            }
+            
+            renderFileTree(sourceId, archiveName, filesData, recoveryDiv, folderPath);
+        }
+
+        function renderFileTree(sourceId, archiveName, filesData, recoveryDiv, currentPath) {
+            const files = filesData.files || [];
+            
+            if (files.length === 0) {
+                recoveryDiv.innerHTML = '<p>Dieser Ordner ist leer</p>';
+                return;
+            }
+            
+            let html = '<div class="card">';
+            html += '<h2>Dateien im Archiv: ' + decodeURIComponent(archiveName) + '</h2>';
+            
+            // Breadcrumb Navigation
+            if (currentPath) {
+                html += '<div style="margin-bottom: 15px; padding: 10px; background: #f5f5f5; border-radius: 4px;">';
+                html += '<strong>📍 Ordner:</strong> ';
+                html += `<button onclick="loadArchiveFiles('${sourceId}', '${archiveName}')" style="background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline; padding: 0; font-size: 14px;">archive root</button>`;
+                
+                const parts = currentPath.split('/').filter(p => p);
+                let buildPath = '';
+                for (const part of parts) {
+                    buildPath = buildPath ? buildPath + '/' + part : part;  // Keine führendes /!
+                    const escapedPath = buildPath.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    html += ` / <button onclick="browseFolder('${sourceId}', '${archiveName}', '${escapedPath}')" style="background: none; border: none; color: #667eea; cursor: pointer; text-decoration: underline; padding: 0; font-size: 14px;">${part}</button>`;
+                }
+                html += '</div>';
+            }
+            
+            html += '<table class="table"><thead><tr><th>Typ</th><th>Name</th><th>Größe</th><th>Aktion</th></tr></thead><tbody>';
+            
+            for (const file of files) {
+                const isFolder = file.isFolder || file.type === 'directory';
+                const size = isFolder ? '-' : (file.size ? formatBytes(file.size) : '-');
+                const icon = isFolder ? '📁' : '📄';
+                const fullPath = file.path;
+                const escapedPath = fullPath.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                
+                // Für Ordner: ganze Zeile klickbar machen
+                if (isFolder) {
+                    html += `<tr style="cursor: pointer;" onclick="browseFolder('${sourceId}', '${archiveName}', '${escapedPath}')">`;
+                    html += '<td>' + icon + '</td>';
+                    html += '<td><strong>' + file.name + '</strong></td>';
+                    html += '<td>' + size + '</td>';
+                    html += '<td>';
+                    html += `<button onclick="event.stopPropagation(); downloadFolderAsZip('${sourceId}', '${archiveName}', '${escapedPath}')">📦 ZIP</button>`;
+                    html += '</td></tr>';
+                } else {
+                    // Für Dateien: normale Zeile
+                    html += '<tr>';
+                    html += '<td>' + icon + '</td>';
+                    html += '<td><strong>' + file.name + '</strong></td>';
+                    html += '<td>' + size + '</td>';
+                    html += '<td>';
+                    html += `<button onclick="downloadFile('${sourceId}', '${archiveName}', '${escapedPath}')">⬇️ Download</button>`;
+                    html += '</td></tr>';
+                }
             }
             
             html += '</tbody></table></div>';
             recoveryDiv.innerHTML = html;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        async function downloadFolderAsZip(sourceId, archiveName, folderPath) {
+            try {
+                const response = await fetch(`/api/borg/extract-folder/${sourceId}/${archiveName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderPath: folderPath })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(`Fehler: ${error.error}`);
+                    return;
+                }
+                
+                // Download starten
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = folderPath.split('/').pop() + '.zip';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                
+                showAlert('recoveryAlerts', 'Ordner erfolgreich als ZIP heruntergeladen', 'success');
+            } catch (error) {
+                showAlert('recoveryAlerts', 'Fehler beim Download: ' + error.message, 'error');
+            }
         }
 
         async function downloadFile(sourceId, archiveName, filePath) {
